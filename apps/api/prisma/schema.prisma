@@ -1,0 +1,509 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  SALES_MANAGER
+  ACCOUNTANT
+  HR_MANAGER
+  AGENT
+  EMPLOYEE
+}
+
+enum DealStage {
+  NEW
+  DISCOVERY
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AccountingPeriodStatus {
+  OPEN
+  REVIEW
+  CLOSED
+}
+
+model Tenant {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  enabledModules String[]     @default(["crm", "accounting", "hr", "forms", "automation", "settings"])
+  planCode    String          @default("enterprise")
+  subscriptionStatus String   @default("active")
+  onboardingCompleted Boolean @default(true)
+  billingEmail String?
+  customDomain String?
+  emailFromName String?
+  emailFromAddress String?
+  replyToEmail String?
+  stripeCustomerId String?
+  stripeSubscriptionId String?
+  stripePriceId String?
+  trialEndsAt DateTime?
+  subscriptionRenewsAt DateTime?
+  maxUsers    Int             @default(250)
+  maxStorageGb Int            @default(250)
+  supportEmail String?
+  supportPhone String?
+  website     String?
+  addressLine1 String?
+  city        String?
+  country     String?
+  logoUrl     String?
+  timezone    String          @default("Africa/Johannesburg")
+  currency    String          @default("ZAR")
+  defaultLanguage String      @default("en")
+  invoicePrefix String        @default("INV")
+  themeMode   String          @default("light")
+  requireMfa  Boolean         @default(false)
+  allowLocalAuth Boolean      @default(true)
+  sessionTimeoutMinutes Int   @default(480)
+  users       User[]
+  contacts    Contact[]
+  companies   Company[]
+  deals       Deal[]
+  activities  Activity[]
+  invoices    Invoice[]
+  expenses    Expense[]
+  vendors     Vendor[]
+  bankAccounts BankAccount[]
+  chartAccounts ChartAccount[]
+  taxRates    TaxRate[]
+  accountingPeriods AccountingPeriod[]
+  journalEntries JournalEntry[]
+  employees   Employee[]
+  forms       FormTemplate[]
+  workflows   Workflow[]
+  dashboards  Dashboard[]
+  auditLogs   AuditLog[]
+  attachments FileAttachment[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model User {
+  id           String      @id @default(cuid())
+  tenantId     String
+  tenant       Tenant      @relation(fields: [tenantId], references: [id])
+  email        String
+  fullName     String
+  role         UserRole
+  passwordHash String      @default("")
+  employees    Employee[]
+  activities   Activity[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([tenantId, email])
+}
+
+model Company {
+  id          String      @id @default(cuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  name        String
+  industry    String?
+  website     String?
+  contacts    Contact[]
+  deals       Deal[]
+  invoices    Invoice[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Contact {
+  id          String      @id @default(cuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  companyId   String?
+  company     Company?    @relation(fields: [companyId], references: [id])
+  fullName    String
+  email       String?
+  phone       String?
+  tags        String[]
+  notes       Note[]
+  activities  Activity[]
+  invoices    Invoice[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Deal {
+  id          String      @id @default(cuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  companyId   String?
+  company     Company?    @relation(fields: [companyId], references: [id])
+  title       String
+  amount      Decimal     @db.Decimal(14, 2)
+  currency    String      @default("ZAR")
+  stage       DealStage
+  closeDate   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Activity {
+  id          String      @id @default(cuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  contactId   String?
+  contact     Contact?    @relation(fields: [contactId], references: [id])
+  ownerId     String?
+  owner       User?       @relation(fields: [ownerId], references: [id])
+  type        String
+  title       String
+  occurredAt  DateTime
+  createdAt   DateTime    @default(now())
+}
+
+model Note {
+  id          String      @id @default(cuid())
+  contactId   String
+  contact     Contact     @relation(fields: [contactId], references: [id])
+  body        String
+  createdAt   DateTime    @default(now())
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  tenantId    String
+  tenant      Tenant        @relation(fields: [tenantId], references: [id])
+  contactId   String?
+  contact     Contact?      @relation(fields: [contactId], references: [id])
+  companyId   String?
+  company     Company?      @relation(fields: [companyId], references: [id])
+  customer    String
+  billingEmail String?
+  billingPhone String?
+  number      String
+  purchaseOrder String?
+  description String?
+  notes       String?
+  status      InvoiceStatus
+  currency    String        @default("ZAR")
+  subtotal    Decimal       @db.Decimal(14, 2)
+  taxAmount   Decimal       @db.Decimal(14, 2)
+  total       Decimal       @db.Decimal(14, 2)
+  issuedAt    DateTime
+  dueAt       DateTime
+  payments    Payment[]
+  expenses    Expense[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([tenantId, number])
+}
+
+model Expense {
+  id          String      @id @default(cuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  invoiceId   String?
+  invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
+  category    String
+  vendor      String?
+  currency    String      @default("ZAR")
+  amount      Decimal     @db.Decimal(14, 2)
+  incurredAt  DateTime
+  createdAt   DateTime    @default(now())
+}
+
+model Payment {
+  id          String      @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice     @relation(fields: [invoiceId], references: [id])
+  provider    String
+  amount      Decimal     @db.Decimal(14, 2)
+  receivedAt  DateTime
+}
+
+model Vendor {
+  id            String      @id @default(cuid())
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  name          String
+  email         String?
+  phone         String?
+  category      String?
+  paymentTerms  String?
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model BankAccount {
+  id             String      @id @default(cuid())
+  tenantId       String
+  tenant         Tenant      @relation(fields: [tenantId], references: [id])
+  bankName       String
+  accountName    String
+  accountNumber  String
+  currency       String      @default("ZAR")
+  currentBalance Decimal     @db.Decimal(14, 2) @default(0)
+  active         Boolean     @default(true)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model ChartAccount {
+  id           String      @id @default(cuid())
+  tenantId     String
+  tenant       Tenant      @relation(fields: [tenantId], references: [id])
+  code         String
+  name         String
+  category     String
+  balanceSide  String      @default("DEBIT")
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  journalLines JournalEntryLine[]
+
+  @@unique([tenantId, code])
+}
+
+model TaxRate {
+  id           String      @id @default(cuid())
+  tenantId     String
+  tenant       Tenant      @relation(fields: [tenantId], references: [id])
+  name         String
+  code         String
+  ratePercent  Decimal     @db.Decimal(6, 2)
+  appliesTo    String      @default("SALES")
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([tenantId, code])
+}
+
+model AccountingPeriod {
+  id          String                 @id @default(cuid())
+  tenantId    String
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id])
+  label       String
+  startDate   DateTime
+  endDate     DateTime
+  status      AccountingPeriodStatus @default(OPEN)
+  closedAt    DateTime?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@unique([tenantId, label])
+}
+
+model JournalEntry {
+  id          String      @id @default(cuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  entryDate   DateTime
+  reference   String?
+  memo        String?
+  status      String      @default("POSTED")
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  lines       JournalEntryLine[]
+}
+
+model JournalEntryLine {
+  id             String        @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        ChartAccount  @relation(fields: [accountId], references: [id])
+  description    String?
+  debit          Decimal       @db.Decimal(14, 2) @default(0)
+  credit         Decimal       @db.Decimal(14, 2) @default(0)
+  createdAt      DateTime      @default(now())
+}
+
+model Employee {
+  id            String         @id @default(cuid())
+  tenantId      String
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  userId        String?
+  user          User?          @relation(fields: [userId], references: [id])
+  fullName      String
+  email         String
+  phone         String?
+  title         String
+  department    String?
+  location      String?
+  managerName   String?
+  employmentStatus String? 
+  startDate     DateTime?
+  salaryAmount  Decimal?       @db.Decimal(14, 2)
+  leaveRequests LeaveRequest[]
+  documents     EmployeeDocument[]
+  attendanceRecords AttendanceRecord[]
+  payrollRuns   PayrollRun[]
+  performanceReviews PerformanceReview[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model LeaveRequest {
+  id           String       @id @default(cuid())
+  employeeId   String
+  employee     Employee     @relation(fields: [employeeId], references: [id])
+  startDate    DateTime
+  endDate      DateTime
+  type         String
+  status       LeaveStatus
+  reason       String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @default(now()) @updatedAt
+}
+
+model EmployeeDocument {
+  id           String      @id @default(cuid())
+  employeeId   String
+  employee     Employee    @relation(fields: [employeeId], references: [id])
+  label        String
+  category     String?
+  fileKey      String
+  expiresAt    DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model AttendanceRecord {
+  id           String      @id @default(cuid())
+  employeeId   String
+  employee     Employee    @relation(fields: [employeeId], references: [id])
+  date         DateTime
+  status       String
+  checkInAt    DateTime?
+  checkOutAt   DateTime?
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model PayrollRun {
+  id           String      @id @default(cuid())
+  employeeId   String
+  employee     Employee    @relation(fields: [employeeId], references: [id])
+  periodLabel  String
+  payDate      DateTime
+  grossAmount  Decimal     @db.Decimal(14, 2) @default(0)
+  deductions   Decimal     @db.Decimal(14, 2) @default(0)
+  netAmount    Decimal     @db.Decimal(14, 2) @default(0)
+  status       String
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model PerformanceReview {
+  id           String      @id @default(cuid())
+  employeeId   String
+  employee     Employee    @relation(fields: [employeeId], references: [id])
+  reviewDate   DateTime
+  score        Int?
+  reviewerName String?
+  status       String
+  summary      String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model FormTemplate {
+  id              String         @id @default(cuid())
+  tenantId        String
+  tenant          Tenant         @relation(fields: [tenantId], references: [id])
+  name            String
+  slug            String         @unique
+  moduleKey       String
+  schemaJson      Json
+  published       Boolean        @default(false)
+  responses       FormResponse[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model FormResponse {
+  id              String        @id @default(cuid())
+  formTemplateId  String
+  formTemplate    FormTemplate  @relation(fields: [formTemplateId], references: [id])
+  payloadJson     Json
+  submittedAt     DateTime      @default(now())
+}
+
+model Workflow {
+  id              String      @id @default(cuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id])
+  name            String
+  triggerKey      String
+  definitionJson  Json
+  active          Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Dashboard {
+  id              String            @id @default(cuid())
+  tenantId        String
+  tenant          Tenant            @relation(fields: [tenantId], references: [id])
+  name            String
+  widgets         DashboardWidget[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model DashboardWidget {
+  id              String      @id @default(cuid())
+  dashboardId     String
+  dashboard       Dashboard   @relation(fields: [dashboardId], references: [id])
+  type            String
+  configJson      Json
+}
+
+model FileAttachment {
+  id              String      @id @default(cuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id])
+  entityType      String
+  entityId        String
+  fileKey         String
+  fileName        String
+  mimeType        String
+  sizeBytes       Int
+  createdAt       DateTime    @default(now())
+}
+
+model AuditLog {
+  id              String      @id @default(cuid())
+  tenantId        String
+  tenant          Tenant      @relation(fields: [tenantId], references: [id])
+  actorId         String?
+  action          String
+  entityType      String
+  entityId        String?
+  metadataJson    Json?
+  createdAt       DateTime    @default(now())
+}

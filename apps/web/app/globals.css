@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --color-ink: 20 33 61;
+  --color-soft: 245 248 255;
+  --color-line: 216 226 240;
+  --color-surface: 255 255 255;
+  --color-surface-muted: 248 251 255;
+  --color-page-start: 237 244 255;
+  --color-page-mid: 249 251 255;
+  --color-page-end: 245 248 255;
+  --color-subtext: 100 116 139;
+  --color-subtext-strong: 71 85 105;
+  --color-subtext-soft: 148 163 184;
+  --shadow-panel: 0 18px 55px rgba(51, 87, 162, 0.1);
+  --shadow-card: 0 8px 24px rgba(37, 69, 132, 0.07);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --color-ink: 229 238 252;
+  --color-soft: 18 27 45;
+  --color-line: 51 65 85;
+  --color-surface: 23 32 51;
+  --color-surface-muted: 30 41 59;
+  --color-page-start: 15 23 42;
+  --color-page-mid: 15 23 42;
+  --color-page-end: 9 14 28;
+  --color-subtext: 159 176 207;
+  --color-subtext-strong: 203 213 225;
+  --color-subtext-soft: 148 163 184;
+  --shadow-panel: 0 22px 60px rgba(2, 6, 23, 0.48);
+  --shadow-card: 0 10px 30px rgba(2, 6, 23, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-plus-jakarta), sans-serif;
+  background: rgb(var(--color-page-end));
+  color: rgb(var(--color-ink));
+  transition: background 180ms ease, color 180ms ease;
+}
+
+html[data-theme="dark"] body {
+  background: rgb(var(--color-page-end));
+  color: rgb(var(--color-ink));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.theme-page {
+  background: radial-gradient(
+    circle at top,
+    rgb(var(--color-page-start)) 0%,
+    rgb(var(--color-page-mid)) 40%,
+    rgb(var(--color-page-end)) 100%
+  );
+  transition: background 180ms ease;
+}
+
+.theme-surface {
+  background: rgb(var(--color-surface));
+  border-color: rgb(var(--color-line));
+  box-shadow: var(--shadow-card);
+}
+
+.theme-surface-muted {
+  background: rgb(var(--color-surface-muted));
+  border-color: rgb(var(--color-line));
+}
+
+.theme-header {
+  background: color-mix(in srgb, rgb(var(--color-surface)) 88%, transparent);
+  border-color: rgb(var(--color-line));
+}
+
+.theme-text {
+  color: rgb(var(--color-ink));
+}
+
+.theme-subtext {
+  color: rgb(var(--color-subtext));
+}
+
+.subtle-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+}
+
+.subtle-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.subtle-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.subtle-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.42);
+  background-clip: padding-box;
+}
+
+.subtle-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.62);
+  background-clip: padding-box;
+}
+
+html[data-theme="dark"] .subtle-scroll {
+  scrollbar-color: rgba(148, 163, 184, 0.38) transparent;
+}
+
+html[data-theme="dark"] .subtle-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.34);
+  background-clip: padding-box;
+}
+
+html[data-theme="dark"] .subtle-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+  background-clip: padding-box;
+}
+
+html[data-theme="dark"] .bg-white,
+html[data-theme="dark"] .bg-white\/90,
+html[data-theme="dark"] .bg-white\/80 {
+  background-color: rgb(var(--color-surface)) !important;
+}
+
+html[data-theme="dark"] .bg-slate-50\/70,
+html[data-theme="dark"] .bg-soft,
+html[data-theme="dark"] .bg-soft\/40,
+html[data-theme="dark"] .bg-soft\/50,
+html[data-theme="dark"] .bg-soft\/60,
+html[data-theme="dark"] .bg-soft\/70 {
+  background-color: rgb(var(--color-surface-muted)) !important;
+}
+
+html[data-theme="dark"] .text-slate-400 {
+  color: rgb(var(--color-subtext-soft)) !important;
+}
+
+html[data-theme="dark"] .text-slate-500,
+html[data-theme="dark"] .text-slate-600 {
+  color: rgb(var(--color-subtext)) !important;
+}
+
+html[data-theme="dark"] .text-slate-700 {
+  color: rgb(var(--color-subtext-strong)) !important;
+}
+
+html[data-theme="dark"] .border-line,
+html[data-theme="dark"] .border-slate-50,
+html[data-theme="dark"] .border-slate-100,
+html[data-theme="dark"] .border-slate-200 {
+  border-color: rgb(var(--color-line)) !important;
+}
