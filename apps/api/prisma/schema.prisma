@@ -8,13 +8,19 @@ datasource db {
 }
 
 enum UserRole {
+  SUPER_ADMIN
+  ORGANISATION_ADMIN
   OWNER
   ADMIN
+  FINANCE_MANAGER
   SALES_MANAGER
   ACCOUNTANT
   HR_MANAGER
+  PROJECT_MANAGER
+  IT_MANAGER
   AGENT
   EMPLOYEE
+  VIEWER
 }
 
 enum DealStage {
@@ -46,464 +52,982 @@ enum AccountingPeriodStatus {
   CLOSED
 }
 
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
 model Tenant {
-  id          String          @id @default(cuid())
-  name        String
-  slug        String          @unique
-  enabledModules String[]     @default(["crm", "accounting", "hr", "forms", "automation", "settings"])
-  planCode    String          @default("enterprise")
-  subscriptionStatus String   @default("active")
-  onboardingCompleted Boolean @default(true)
-  billingEmail String?
-  customDomain String?
-  emailFromName String?
-  emailFromAddress String?
-  replyToEmail String?
-  stripeCustomerId String?
-  stripeSubscriptionId String?
-  stripePriceId String?
-  trialEndsAt DateTime?
-  subscriptionRenewsAt DateTime?
-  maxUsers    Int             @default(250)
-  maxStorageGb Int            @default(250)
-  supportEmail String?
-  supportPhone String?
-  website     String?
-  addressLine1 String?
-  city        String?
-  country     String?
-  logoUrl     String?
-  timezone    String          @default("Africa/Johannesburg")
-  currency    String          @default("ZAR")
-  defaultLanguage String      @default("en")
-  invoicePrefix String        @default("INV")
-  themeMode   String          @default("light")
-  requireMfa  Boolean         @default(false)
-  allowLocalAuth Boolean      @default(true)
-  sessionTimeoutMinutes Int   @default(480)
-  users       User[]
-  contacts    Contact[]
-  companies   Company[]
-  deals       Deal[]
-  activities  Activity[]
-  invoices    Invoice[]
-  expenses    Expense[]
-  vendors     Vendor[]
-  bankAccounts BankAccount[]
-  chartAccounts ChartAccount[]
-  taxRates    TaxRate[]
-  accountingPeriods AccountingPeriod[]
-  journalEntries JournalEntry[]
-  employees   Employee[]
-  forms       FormTemplate[]
-  workflows   Workflow[]
-  dashboards  Dashboard[]
-  auditLogs   AuditLog[]
-  attachments FileAttachment[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                      String                   @id @default(cuid())
+  name                    String
+  slug                    String                   @unique
+  attendanceQrToken       String?                  @unique
+  enabledModules          String[]                 @default(["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"])
+  planCode                String                   @default("enterprise")
+  subscriptionStatus      String                   @default("active")
+  onboardingCompleted     Boolean                  @default(true)
+  billingEmail            String?
+  customDomain            String?
+  emailFromName           String?
+  emailFromAddress        String?
+  replyToEmail            String?
+  stripeCustomerId        String?
+  stripeSubscriptionId    String?
+  stripePriceId           String?
+  trialEndsAt             DateTime?
+  subscriptionRenewsAt    DateTime?
+  maxUsers                Int                      @default(250)
+  maxStorageGb            Int                      @default(250)
+  supportEmail            String?
+  supportPhone            String?
+  website                 String?
+  addressLine1            String?
+  city                    String?
+  country                 String?
+  logoUrl                 String?
+  timezone                String                   @default("Africa/Johannesburg")
+  currency                String                   @default("ZAR")
+  defaultLanguage         String                   @default("en")
+  invoicePrefix           String                   @default("INV")
+  themeMode               String                   @default("light")
+  requireMfa              Boolean                  @default(false)
+  allowLocalAuth          Boolean                  @default(true)
+  sessionTimeoutMinutes   Int                      @default(480)
+  users                   User[]
+  contacts                Contact[]
+  companies               Company[]
+  deals                   Deal[]
+  activities              Activity[]
+  invoices                Invoice[]
+  quotes                  Quote[]
+  expenses                Expense[]
+  vendors                 Vendor[]
+  bankAccounts            BankAccount[]
+  chartAccounts           ChartAccount[]
+  taxRates                TaxRate[]
+  accountingPeriods       AccountingPeriod[]
+  journalEntries          JournalEntry[]
+  employees               Employee[]
+  forms                   FormTemplate[]
+  workflows               Workflow[]
+  dashboards              Dashboard[]
+  auditLogs               AuditLog[]
+  attachments             FileAttachment[]
+  departments             Department[]
+  permissions             Permission[]
+  roles                   Role[]
+  assets                  Asset[]
+  projects                Project[]
+  tasks                   Task[]
+  timeEntries             TimeEntry[]
+  workSchedules           WorkSchedule[]
+  leaveBalances           LeaveBalance[]
+  notifications           Notification[]
+  integrationConnections  IntegrationConnection[]
+  integrationLogs         IntegrationLog[]
+  sessions                Session[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  oauthLoginCodes         OAuthLoginCode[]
+  softwareLicences        SoftwareLicence[]
+  assetCategories         AssetCategory[]
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
 }
 
 model User {
-  id           String      @id @default(cuid())
-  tenantId     String
-  tenant       Tenant      @relation(fields: [tenantId], references: [id])
-  email        String
-  fullName     String
-  role         UserRole
-  passwordHash String      @default("")
-  employees    Employee[]
-  activities   Activity[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                      String                   @id @default(cuid())
+  tenantId                String
+  tenant                  Tenant                   @relation(fields: [tenantId], references: [id])
+  email                   String
+  fullName                String
+  role                    UserRole
+  status                  AccountStatus            @default(ACTIVE)
+  phone                   String?
+  lastLoginAt             DateTime?
+  deactivatedAt           DateTime?
+  emailVerifiedAt         DateTime?
+  passwordHash            String                   @default("")
+  employees               Employee[]
+  activities              Activity[]
+  sessions                Session[]
+  userRoles               UserRoleAssignment[]
+  notifications           Notification[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  oauthLoginCodes         OAuthLoginCode[]
+  uploadedEmployeeDocuments EmployeeDocument[] @relation("EmployeeDocumentUploader")
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
 
   @@unique([tenantId, email])
 }
 
-model Company {
-  id          String      @id @default(cuid())
+model Permission {
+  id              String           @id @default(cuid())
+  tenantId        String
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  key             String
+  description     String?
+  rolePermissions RolePermission[]
+  createdAt       DateTime         @default(now())
+
+  @@unique([tenantId, key])
+}
+
+model Role {
+  id              String               @id @default(cuid())
+  tenantId        String
+  tenant          Tenant               @relation(fields: [tenantId], references: [id])
+  name            String
+  description     String?
+  rolePermissions RolePermission[]
+  users           UserRoleAssignment[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([tenantId, name])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRoleAssignment {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  @@index([tenantId, userId])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tenantId, userId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tenantId, userId])
+}
+
+model OAuthLoginCode {
+  id         String    @id @default(cuid())
+  codeHash   String    @unique
+  userId     String
+  tenantId   String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+  @@index([tenantId, expiresAt])
+}
+
+model Department {
+  id          String     @id @default(cuid())
   tenantId    String
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name        String
-  industry    String?
-  website     String?
-  contacts    Contact[]
-  deals       Deal[]
-  invoices    Invoice[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  description String?
+  budget      Decimal?   @db.Decimal(14, 2)
+  headUserId  String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  employees   Employee[]
+  expenses    Expense[]
+
+  @@unique([tenantId, name])
+}
+
+model AssetCategory {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  assets      Asset[]
+
+  @@unique([tenantId, name])
+}
+
+model Company {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id])
+  customerNumber     String?
+  name               String
+  contactPerson      String?
+  email              String?
+  phone              String?
+  website            String?
+  address            String?
+  vatNumber          String?
+  registrationNumber String?
+  industry           String?
+  status             String?   @default("ACTIVE")
+  source             String?
+  assignedUserId     String?
+  notes              String?
+  contacts           Contact[]
+  deals              Deal[]
+  invoices           Invoice[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([tenantId, customerNumber])
 }
 
 model Contact {
-  id          String      @id @default(cuid())
-  tenantId    String
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  companyId   String?
-  company     Company?    @relation(fields: [companyId], references: [id])
-  fullName    String
-  email       String?
-  phone       String?
-  tags        String[]
-  notes       Note[]
-  activities  Activity[]
-  invoices    Invoice[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                String     @id @default(cuid())
+  tenantId          String
+  tenant            Tenant     @relation(fields: [tenantId], references: [id])
+  companyId         String?
+  company           Company?   @relation(fields: [companyId], references: [id])
+  fullName          String
+  email             String?
+  phone             String?
+  address           String?
+  externalId        String?
+  externalSystem    String?
+  externalUpdatedAt DateTime?
+  tags              String[]
+  notes             Note[]
+  activities        Activity[]
+  invoices          Invoice[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@unique([tenantId, externalSystem, externalId])
 }
 
 model Deal {
-  id          String      @id @default(cuid())
-  tenantId    String
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  companyId   String?
-  company     Company?    @relation(fields: [companyId], references: [id])
-  title       String
-  amount      Decimal     @db.Decimal(14, 2)
-  currency    String      @default("ZAR")
-  stage       DealStage
-  closeDate   DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  companyId String?
+  company   Company?  @relation(fields: [companyId], references: [id])
+  title     String
+  amount    Decimal   @db.Decimal(14, 2)
+  currency  String    @default("ZAR")
+  stage     DealStage
+  closeDate DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Activity {
-  id          String      @id @default(cuid())
-  tenantId    String
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  contactId   String?
-  contact     Contact?    @relation(fields: [contactId], references: [id])
-  ownerId     String?
-  owner       User?       @relation(fields: [ownerId], references: [id])
-  type        String
-  title       String
-  occurredAt  DateTime
-  createdAt   DateTime    @default(now())
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  contactId  String?
+  contact    Contact? @relation(fields: [contactId], references: [id])
+  ownerId    String?
+  owner      User?    @relation(fields: [ownerId], references: [id])
+  type       String
+  title      String
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
 }
 
 model Note {
-  id          String      @id @default(cuid())
-  contactId   String
-  contact     Contact     @relation(fields: [contactId], references: [id])
-  body        String
-  createdAt   DateTime    @default(now())
+  id        String   @id @default(cuid())
+  contactId String
+  contact   Contact  @relation(fields: [contactId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
 }
 
 model Invoice {
-  id          String        @id @default(cuid())
-  tenantId    String
-  tenant      Tenant        @relation(fields: [tenantId], references: [id])
-  contactId   String?
-  contact     Contact?      @relation(fields: [contactId], references: [id])
-  companyId   String?
-  company     Company?      @relation(fields: [companyId], references: [id])
-  customer    String
-  billingEmail String?
-  billingPhone String?
-  number      String
+  id            String        @id @default(cuid())
+  tenantId      String
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  contactId     String?
+  contact       Contact?      @relation(fields: [contactId], references: [id])
+  companyId     String?
+  company       Company?      @relation(fields: [companyId], references: [id])
+  projectId     String?
+  project       Project?      @relation(fields: [projectId], references: [id])
+  customer      String
+  billingEmail  String?
+  billingPhone  String?
+  number        String
   purchaseOrder String?
-  description String?
-  notes       String?
-  status      InvoiceStatus
-  currency    String        @default("ZAR")
-  subtotal    Decimal       @db.Decimal(14, 2)
-  taxAmount   Decimal       @db.Decimal(14, 2)
-  total       Decimal       @db.Decimal(14, 2)
-  issuedAt    DateTime
-  dueAt       DateTime
-  payments    Payment[]
-  expenses    Expense[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  description   String?
+  notes         String?
+  status        InvoiceStatus
+  currency      String        @default("ZAR")
+  subtotal      Decimal       @db.Decimal(14, 2)
+  taxAmount     Decimal       @db.Decimal(14, 2)
+  total         Decimal       @db.Decimal(14, 2)
+  paidAmount    Decimal       @default(0) @db.Decimal(14, 2)
+  issuedAt      DateTime
+  dueAt         DateTime
+  payments      Payment[]
+  items         InvoiceItem[]
+  expenses      Expense[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   @@unique([tenantId, number])
 }
 
 model Expense {
-  id          String      @id @default(cuid())
-  tenantId    String
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  invoiceId   String?
-  invoice     Invoice?    @relation(fields: [invoiceId], references: [id])
-  category    String
-  vendor      String?
-  currency    String      @default("ZAR")
-  amount      Decimal     @db.Decimal(14, 2)
-  incurredAt  DateTime
-  createdAt   DateTime    @default(now())
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  invoiceId  String?
+  invoice    Invoice? @relation(fields: [invoiceId], references: [id])
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id])
+  category   String
+  vendor     String?
+  currency   String   @default("ZAR")
+  amount     Decimal  @db.Decimal(14, 2)
+  taxAmount  Decimal  @default(0) @db.Decimal(14, 2)
+  incurredAt DateTime
+  status     String   @default("DRAFT")
+  createdAt  DateTime @default(now())
 }
 
 model Payment {
-  id          String      @id @default(cuid())
-  invoiceId   String
-  invoice     Invoice     @relation(fields: [invoiceId], references: [id])
-  provider    String
-  amount      Decimal     @db.Decimal(14, 2)
-  receivedAt  DateTime
+  id         String   @id @default(cuid())
+  invoiceId  String
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id])
+  provider   String
+  method     String   @default("BANK_TRANSFER")
+  reference  String?
+  amount     Decimal  @db.Decimal(14, 2)
+  receivedAt DateTime
 }
 
 model Vendor {
-  id            String      @id @default(cuid())
-  tenantId      String
-  tenant        Tenant      @relation(fields: [tenantId], references: [id])
-  name          String
-  email         String?
-  phone         String?
-  category      String?
-  paymentTerms  String?
-  active        Boolean     @default(true)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id                 String   @id @default(cuid())
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+  supplierNumber     String?
+  name               String
+  contactPerson      String?
+  email              String?
+  phone              String?
+  address            String?
+  vatNumber          String?
+  registrationNumber String?
+  bankInformation    String?
+  notes              String?
+  category           String?
+  paymentTerms       String?
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([tenantId, supplierNumber])
 }
 
 model BankAccount {
-  id             String      @id @default(cuid())
+  id             String   @id @default(cuid())
   tenantId       String
-  tenant         Tenant      @relation(fields: [tenantId], references: [id])
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
   bankName       String
   accountName    String
   accountNumber  String
-  currency       String      @default("ZAR")
-  currentBalance Decimal     @db.Decimal(14, 2) @default(0)
-  active         Boolean     @default(true)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  currency       String   @default("ZAR")
+  currentBalance Decimal  @default(0) @db.Decimal(14, 2)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model ChartAccount {
-  id           String      @id @default(cuid())
+  id           String             @id @default(cuid())
   tenantId     String
-  tenant       Tenant      @relation(fields: [tenantId], references: [id])
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
   code         String
   name         String
   category     String
-  balanceSide  String      @default("DEBIT")
-  active       Boolean     @default(true)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  balanceSide  String             @default("DEBIT")
+  active       Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
   journalLines JournalEntryLine[]
 
   @@unique([tenantId, code])
 }
 
 model TaxRate {
-  id           String      @id @default(cuid())
-  tenantId     String
-  tenant       Tenant      @relation(fields: [tenantId], references: [id])
-  name         String
-  code         String
-  ratePercent  Decimal     @db.Decimal(6, 2)
-  appliesTo    String      @default("SALES")
-  active       Boolean     @default(true)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name        String
+  code        String
+  ratePercent Decimal  @db.Decimal(6, 2)
+  appliesTo   String   @default("SALES")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([tenantId, code])
 }
 
 model AccountingPeriod {
-  id          String                 @id @default(cuid())
-  tenantId    String
-  tenant      Tenant                 @relation(fields: [tenantId], references: [id])
-  label       String
-  startDate   DateTime
-  endDate     DateTime
-  status      AccountingPeriodStatus @default(OPEN)
-  closedAt    DateTime?
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
+  id        String                 @id @default(cuid())
+  tenantId  String
+  tenant    Tenant                 @relation(fields: [tenantId], references: [id])
+  label     String
+  startDate DateTime
+  endDate   DateTime
+  status    AccountingPeriodStatus @default(OPEN)
+  closedAt  DateTime?
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
 
   @@unique([tenantId, label])
 }
 
 model JournalEntry {
-  id          String      @id @default(cuid())
-  tenantId    String
-  tenant      Tenant      @relation(fields: [tenantId], references: [id])
-  entryDate   DateTime
-  reference   String?
-  memo        String?
-  status      String      @default("POSTED")
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  lines       JournalEntryLine[]
+  id        String             @id @default(cuid())
+  tenantId  String
+  tenant    Tenant             @relation(fields: [tenantId], references: [id])
+  entryDate DateTime
+  reference String?
+  memo      String?
+  status    String             @default("POSTED")
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  lines     JournalEntryLine[]
 }
 
 model JournalEntryLine {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   journalEntryId String
-  journalEntry   JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
   accountId      String
-  account        ChartAccount  @relation(fields: [accountId], references: [id])
+  account        ChartAccount @relation(fields: [accountId], references: [id])
   description    String?
-  debit          Decimal       @db.Decimal(14, 2) @default(0)
-  credit         Decimal       @db.Decimal(14, 2) @default(0)
-  createdAt      DateTime      @default(now())
+  debit          Decimal      @default(0) @db.Decimal(14, 2)
+  credit         Decimal      @default(0) @db.Decimal(14, 2)
+  createdAt      DateTime     @default(now())
 }
 
 model Employee {
-  id            String         @id @default(cuid())
-  tenantId      String
-  tenant        Tenant         @relation(fields: [tenantId], references: [id])
-  userId        String?
-  user          User?          @relation(fields: [userId], references: [id])
-  fullName      String
-  email         String
-  phone         String?
-  title         String
-  department    String?
-  location      String?
-  managerName   String?
-  employmentStatus String? 
-  startDate     DateTime?
-  salaryAmount  Decimal?       @db.Decimal(14, 2)
-  leaveRequests LeaveRequest[]
-  documents     EmployeeDocument[]
-  attendanceRecords AttendanceRecord[]
-  payrollRuns   PayrollRun[]
+  id                 String              @id @default(cuid())
+  tenantId           String
+  tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  userId             String?
+  user               User?               @relation(fields: [userId], references: [id])
+  employeeNumber     String?
+  fullName           String
+  email              String
+  phone              String?
+  idPassportNumber   String?
+  dateOfBirth        DateTime?
+  gender             String?
+  address            String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  title              String
+  department         String?
+  departmentId       String?
+  departmentRef      Department?         @relation(fields: [departmentId], references: [id])
+  location           String?
+  managerName        String?
+  employmentStatus   String?
+  employmentType     String?
+  startDate          DateTime?
+  endDate            DateTime?
+  salaryAmount       Decimal?            @db.Decimal(14, 2)
+  bankName           String?
+  bankAccountHolder  String?
+  bankAccountNumber  String?
+  bankBranch         String?
+  bankAccountType    String?
+  leaveRequests      LeaveRequest[]
+  documents          EmployeeDocument[]
+  attendanceRecords  AttendanceRecord[]
+  payrollRuns        PayrollRun[]
   performanceReviews PerformanceReview[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  assets             AssetAssignment[]
+  projects           ProjectMember[]
+  timeEntries        TimeEntry[]
+  workSchedules      WorkSchedule[]
+  leaveBalances      LeaveBalance[]
+
+  @@unique([tenantId, employeeNumber])
 }
 
 model LeaveRequest {
-  id           String       @id @default(cuid())
-  employeeId   String
-  employee     Employee     @relation(fields: [employeeId], references: [id])
-  startDate    DateTime
-  endDate      DateTime
-  type         String
-  status       LeaveStatus
-  reason       String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @default(now()) @updatedAt
+  id                String      @id @default(cuid())
+  employeeId        String
+  employee          Employee    @relation(fields: [employeeId], references: [id])
+  startDate         DateTime
+  endDate           DateTime
+  type              String
+  status            LeaveStatus
+  approvalStage     String      @default("MANAGER")
+  managerApprovedAt DateTime?
+  hrApprovedAt      DateTime?
+  approvedBy        String?
+  reason            String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @default(now()) @updatedAt
 }
 
 model EmployeeDocument {
-  id           String      @id @default(cuid())
-  employeeId   String
-  employee     Employee    @relation(fields: [employeeId], references: [id])
-  label        String
-  category     String?
-  fileKey      String
-  expiresAt    DateTime?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id         String    @id @default(cuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  uploadedById String?
+  uploadedBy User? @relation("EmployeeDocumentUploader", fields: [uploadedById], references: [id])
+  label      String
+  category   String?
+  fileKey    String
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model AttendanceRecord {
-  id           String      @id @default(cuid())
-  employeeId   String
-  employee     Employee    @relation(fields: [employeeId], references: [id])
-  date         DateTime
-  status       String
-  checkInAt    DateTime?
-  checkOutAt   DateTime?
-  notes        String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id            String    @id @default(cuid())
+  employeeId    String
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  date          DateTime
+  status        String
+  checkInAt     DateTime?
+  checkOutAt    DateTime?
+  location      String?
+  device        String?
+  ipAddress     String?
+  clockInMethod String    @default("WEB")
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([employeeId, date])
+  @@index([date, status])
 }
 
 model PayrollRun {
-  id           String      @id @default(cuid())
-  employeeId   String
-  employee     Employee    @relation(fields: [employeeId], references: [id])
-  periodLabel  String
-  payDate      DateTime
-  grossAmount  Decimal     @db.Decimal(14, 2) @default(0)
-  deductions   Decimal     @db.Decimal(14, 2) @default(0)
-  netAmount    Decimal     @db.Decimal(14, 2) @default(0)
-  status       String
-  notes        String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id          String   @id @default(cuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  periodLabel String
+  payDate     DateTime
+  grossAmount Decimal  @default(0) @db.Decimal(14, 2)
+  deductions  Decimal  @default(0) @db.Decimal(14, 2)
+  netAmount   Decimal  @default(0) @db.Decimal(14, 2)
+  status      String
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model PerformanceReview {
-  id           String      @id @default(cuid())
+  id           String   @id @default(cuid())
   employeeId   String
-  employee     Employee    @relation(fields: [employeeId], references: [id])
+  employee     Employee @relation(fields: [employeeId], references: [id])
   reviewDate   DateTime
   score        Int?
   reviewerName String?
   status       String
   summary      String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model FormTemplate {
-  id              String         @id @default(cuid())
-  tenantId        String
-  tenant          Tenant         @relation(fields: [tenantId], references: [id])
-  name            String
-  slug            String         @unique
-  moduleKey       String
-  schemaJson      Json
-  published       Boolean        @default(false)
-  responses       FormResponse[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id         String         @id @default(cuid())
+  tenantId   String
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  name       String
+  slug       String         @unique
+  moduleKey  String
+  schemaJson Json
+  published  Boolean        @default(false)
+  responses  FormResponse[]
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 }
 
 model FormResponse {
-  id              String        @id @default(cuid())
-  formTemplateId  String
-  formTemplate    FormTemplate  @relation(fields: [formTemplateId], references: [id])
-  payloadJson     Json
-  submittedAt     DateTime      @default(now())
+  id             String       @id @default(cuid())
+  formTemplateId String
+  formTemplate   FormTemplate @relation(fields: [formTemplateId], references: [id])
+  payloadJson    Json
+  submittedAt    DateTime     @default(now())
 }
 
 model Workflow {
-  id              String      @id @default(cuid())
-  tenantId        String
-  tenant          Tenant      @relation(fields: [tenantId], references: [id])
-  name            String
-  triggerKey      String
-  definitionJson  Json
-  active          Boolean     @default(true)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  name           String
+  triggerKey     String
+  definitionJson Json
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Dashboard {
-  id              String            @id @default(cuid())
-  tenantId        String
-  tenant          Tenant            @relation(fields: [tenantId], references: [id])
-  name            String
-  widgets         DashboardWidget[]
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id        String            @id @default(cuid())
+  tenantId  String
+  tenant    Tenant            @relation(fields: [tenantId], references: [id])
+  name      String
+  widgets   DashboardWidget[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 }
 
 model DashboardWidget {
-  id              String      @id @default(cuid())
-  dashboardId     String
-  dashboard       Dashboard   @relation(fields: [dashboardId], references: [id])
-  type            String
-  configJson      Json
+  id          String    @id @default(cuid())
+  dashboardId String
+  dashboard   Dashboard @relation(fields: [dashboardId], references: [id])
+  type        String
+  configJson  Json
 }
 
 model FileAttachment {
-  id              String      @id @default(cuid())
-  tenantId        String
-  tenant          Tenant      @relation(fields: [tenantId], references: [id])
-  entityType      String
-  entityId        String
-  fileKey         String
-  fileName        String
-  mimeType        String
-  sizeBytes       Int
-  createdAt       DateTime    @default(now())
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  entityType String
+  entityId   String
+  fileKey    String
+  fileName   String
+  mimeType   String
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
 }
 
 model AuditLog {
-  id              String      @id @default(cuid())
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  actorId       String?
+  action        String
+  entityType    String
+  entityId      String?
+  previousValue Json?
+  newValue      Json?
+  ipAddress     String?
+  userAgent     String?
+  metadataJson  Json?
+  createdAt     DateTime @default(now())
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Decimal  @db.Decimal(14, 3)
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  discount    Decimal  @default(0) @db.Decimal(14, 2)
+  taxRate     Decimal  @default(0) @db.Decimal(6, 2)
+  lineTotal   Decimal  @db.Decimal(14, 2)
+  createdAt   DateTime @default(now())
+}
+
+model Quote {
+  id         String      @id @default(cuid())
+  tenantId   String
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer   String
+  number     String
+  status     String      @default("DRAFT")
+  currency   String      @default("ZAR")
+  subtotal   Decimal     @default(0) @db.Decimal(14, 2)
+  taxAmount  Decimal     @default(0) @db.Decimal(14, 2)
+  total      Decimal     @default(0) @db.Decimal(14, 2)
+  validUntil DateTime?
+  items      QuoteItem[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@unique([tenantId, number])
+}
+
+model QuoteItem {
+  id          String  @id @default(cuid())
+  quoteId     String
+  quote       Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Decimal @db.Decimal(14, 3)
+  unitPrice   Decimal @db.Decimal(14, 2)
+  taxRate     Decimal @default(0) @db.Decimal(6, 2)
+  lineTotal   Decimal @db.Decimal(14, 2)
+}
+
+model Asset {
+  id             String             @id @default(cuid())
+  tenantId       String
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assetTag       String
+  qrToken        String?            @unique
+  name           String
+  category       String
+  categoryId     String?
+  categoryRef    AssetCategory?     @relation(fields: [categoryId], references: [id])
+  manufacturer   String?
+  model          String?
+  serialNumber   String?
+  purchaseDate   DateTime?
+  purchasePrice  Decimal?           @db.Decimal(14, 2)
+  supplier       String?
+  warrantyExpiry DateTime?
+  location       String?
+  department     String?
+  status         String             @default("AVAILABLE")
+  condition      String             @default("GOOD")
+  notes          String?
+  assignments    AssetAssignment[]
+  maintenance    AssetMaintenance[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([tenantId, assetTag])
+  @@index([tenantId, status])
+}
+
+model AssetAssignment {
+  id              String    @id @default(cuid())
+  assetId         String
+  asset           Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employeeId      String
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+  assignedAt      DateTime  @default(now())
+  returnedAt      DateTime?
+  assignedBy      String?
+  returnCondition String?
+  notes           String?
+}
+
+model AssetMaintenance {
+  id          String    @id @default(cuid())
+  assetId     String
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  date        DateTime
+  issue       String
+  description String?
+  provider    String?
+  cost        Decimal?  @db.Decimal(14, 2)
+  status      String    @default("OPEN")
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+}
+
+model SoftwareLicence {
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  software     String
+  keyReference String?
+  vendor       String?
+  licenceCount Int       @default(1)
+  purchaseDate DateTime?
+  renewalDate  DateTime?
+  cost         Decimal?  @db.Decimal(14, 2)
+  status       String    @default("ACTIVE")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Project {
+  id          String          @id @default(cuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  customer    String?
+  managerId   String?
+  startDate   DateTime?
+  endDate     DateTime?
+  budget      Decimal?        @db.Decimal(14, 2)
+  status      String          @default("PLANNING")
+  description String?
+  members     ProjectMember[]
+  tasks       Task[]
+  timeEntries TimeEntry[]
+  invoices    Invoice[]
+  expenses    Expense[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([tenantId, status])
+}
+
+model ProjectMember {
+  projectId  String
+  employeeId String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, employeeId])
+}
+
+model Task {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  projectId      String?
+  project        Project?  @relation(fields: [projectId], references: [id])
+  title          String
+  description    String?
+  assignedUserId String?
+  priority       String    @default("MEDIUM")
+  status         String    @default("TODO")
+  dueDate        DateTime?
+  estimatedHours Decimal?  @db.Decimal(8, 2)
+  actualHours    Decimal?  @db.Decimal(8, 2)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([tenantId, status])
+}
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employeeId  String
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id])
+  taskId      String?
+  startedAt   DateTime
+  endedAt     DateTime?
+  durationMin Int?
+  description String?
+  createdAt   DateTime  @default(now())
+}
+
+model WorkSchedule {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  weekdays   Int[]
+  startTime  String
+  endTime    String
+  breakMin   Int      @default(60)
+  timezone   String   @default("Africa/Johannesburg")
+  active     Boolean  @default(true)
+
+  @@index([tenantId, employeeId])
+}
+
+model LeaveBalance {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType  String
+  year       Int
+  allocated  Decimal  @default(0) @db.Decimal(8, 2)
+  used       Decimal  @default(0) @db.Decimal(8, 2)
+
+  @@unique([employeeId, leaveType, year])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([tenantId, userId, readAt])
+}
+
+model IntegrationConnection {
+  id              String           @id @default(cuid())
   tenantId        String
-  tenant          Tenant      @relation(fields: [tenantId], references: [id])
-  actorId         String?
-  action          String
-  entityType      String
-  entityId        String?
-  metadataJson    Json?
-  createdAt       DateTime    @default(now())
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider        String
+  baseUrl         String?
+  encryptedConfig String?
+  enabled         Boolean          @default(false)
+  lastConnectedAt DateTime?
+  lastSyncedAt    DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  logs            IntegrationLog[]
+
+  @@unique([tenantId, provider])
+}
+
+model IntegrationLog {
+  id               String                 @id @default(cuid())
+  tenantId         String
+  tenant           Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  connectionId     String?
+  connection       IntegrationConnection? @relation(fields: [connectionId], references: [id])
+  status           String
+  operation        String
+  recordsProcessed Int                    @default(0)
+  recordsCreated   Int                    @default(0)
+  recordsUpdated   Int                    @default(0)
+  recordsSkipped   Int                    @default(0)
+  externalEventId  String?                @unique
+  payloadJson      Json?
+  errorMessage     String?
+  startedAt        DateTime               @default(now())
+  completedAt      DateTime?
+
+  @@index([tenantId, startedAt])
 }

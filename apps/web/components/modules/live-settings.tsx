@@ -480,7 +480,7 @@ export function LiveWorkspaceSettingsPage() {
     allowLocalAuth: true,
     sessionTimeoutMinutes: "480",
   });
-  const [enabledModules, setEnabledModules] = useState<string[]>(["crm", "accounting", "hr", "forms", "automation", "settings"]);
+  const [enabledModules, setEnabledModules] = useState<string[]>(["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"]);
 
   useEffect(() => {
     if (!data) return;

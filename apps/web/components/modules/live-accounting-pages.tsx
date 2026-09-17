@@ -3,7 +3,8 @@
 import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { Plus, Search, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { getStoredSession } from "@/lib/session";
 
 type Overview = {
   revenue: number;
@@ -64,6 +65,7 @@ type Expense = {
   currency: string;
   invoiceId?: string | null;
   incurredAt: string;
+  status: string;
 };
 
 type Payment = {
@@ -163,7 +165,7 @@ const emptyInvoice = {
   status: "SENT",
   currency: "ZAR",
 };
-const emptyExpense = { id: "", category: "", vendor: "", amount: "", currency: "ZAR", invoiceId: "", incurredAt: "2026-08-04" };
+const emptyExpense = { id: "", category: "", vendor: "", amount: "", currency: "ZAR", invoiceId: "", incurredAt: "2026-08-04", status: "DRAFT" };
 const emptyPayment = { id: "", provider: "Manual", amount: "", invoiceId: "", receivedAt: "2026-08-04T12:00" };
 const emptyVendor = { id: "", name: "", email: "", phone: "", category: "", paymentTerms: "", active: "true" };
 const emptyBank = { id: "", bankName: "", accountName: "", accountNumber: "", currency: "ZAR", currentBalance: "", active: "true" };
@@ -577,6 +579,7 @@ function ExpenseModal({ form, setForm, invoices, onClose, onSave }: { form: type
           <option value="">Unlinked invoice</option>
           {invoices.map((invoice) => <option key={invoice.id} value={invoice.id}>{invoice.number}</option>)}
         </select>
+        <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500">{["DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "PAID"].map((status) => <option key={status}>{status}</option>)}</select>
         <input type="date" value={form.incurredAt} onChange={(event) => setForm((current) => ({ ...current, incurredAt: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
       </div>
     </BaseModal>
@@ -834,6 +837,22 @@ export function LiveInvoices() {
     }
   }
 
+  async function downloadPdf(invoice: Invoice) {
+    try {
+      const session = getStoredSession();
+      const response = await fetch(`${API_BASE_URL}/accounting/invoices/${invoice.id}/pdf`, { headers: { Authorization: `Bearer ${session?.token ?? ""}`, "X-Tenant-Id": session?.tenantId ?? "" } });
+      if (!response.ok) throw new Error(await response.text());
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${invoice.number}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      notify("error", parseApiError(error, "Failed to generate invoice PDF."));
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
@@ -849,7 +868,7 @@ export function LiveInvoices() {
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{invoice.contact?.fullName || invoice.company?.name || "Unlinked"}</td>
                   <td className="px-4 py-3"><span className="rounded-full bg-soft px-2.5 py-1 text-[10px] font-semibold text-slate-700">{invoice.status}</span></td>
                   <td className="px-4 py-3 text-xs font-semibold text-brand-500 md:text-sm">{invoice.currency} {Number(invoice.total).toLocaleString()}</td>
-                  <td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => { setForm({ id: invoice.id, customer: invoice.customer, billingEmail: invoice.billingEmail ?? "", billingPhone: invoice.billingPhone ?? "", contactId: invoice.contactId ?? "", companyId: invoice.companyId ?? "", number: invoice.number ?? "", purchaseOrder: invoice.purchaseOrder ?? "", description: invoice.description ?? "", notes: invoice.notes ?? "", issuedAt: invoice.issuedAt?.slice(0, 10) ?? "2026-08-04", dueAt: invoice.dueAt?.slice(0, 10) ?? "2026-08-18", subtotal: String(Number(invoice.subtotal)), taxAmount: String(Number(invoice.taxAmount)), status: invoice.status, currency: invoice.currency }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button><button onClick={() => setPendingDelete(invoice.id)} className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" /><span>Delete</span></button></div></td>
+                  <td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => void downloadPdf(invoice)} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">PDF</button><button onClick={() => { setForm({ id: invoice.id, customer: invoice.customer, billingEmail: invoice.billingEmail ?? "", billingPhone: invoice.billingPhone ?? "", contactId: invoice.contactId ?? "", companyId: invoice.companyId ?? "", number: invoice.number ?? "", purchaseOrder: invoice.purchaseOrder ?? "", description: invoice.description ?? "", notes: invoice.notes ?? "", issuedAt: invoice.issuedAt?.slice(0, 10) ?? "2026-08-04", dueAt: invoice.dueAt?.slice(0, 10) ?? "2026-08-18", subtotal: String(Number(invoice.subtotal)), taxAmount: String(Number(invoice.taxAmount)), status: invoice.status, currency: invoice.currency }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button><button onClick={() => setPendingDelete(invoice.id)} className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-soft"><Trash2 className="h-3.5 w-3.5" /><span>Delete</span></button></div></td>
                 </tr>
               ))}
               {filtered.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">No invoices match the current search or filter.</td></tr> : null}
@@ -942,7 +961,7 @@ export function LiveExpensesPage() {
 
   async function saveExpense() {
     try {
-      const payload = { category: form.category || undefined, vendor: form.vendor || undefined, amount: form.amount ? Number(form.amount) : undefined, currency: form.currency || undefined, invoiceId: form.invoiceId || "", incurredAt: form.incurredAt ? new Date(form.incurredAt).toISOString() : undefined };
+      const payload = { category: form.category || undefined, vendor: form.vendor || undefined, amount: form.amount ? Number(form.amount) : undefined, currency: form.currency || undefined, invoiceId: form.invoiceId || "", incurredAt: form.incurredAt ? new Date(form.incurredAt).toISOString() : undefined, status: form.status };
       if (form.id) {
         await apiFetch(`/accounting/expenses/${form.id}`, { method: "PATCH", body: JSON.stringify(payload) });
         notify("success", "Expense updated successfully.");
@@ -975,10 +994,10 @@ export function LiveExpensesPage() {
         <TableHeader label="Expenses" title="Cost and vendor records" description="Track operating expenses and supplier spend." count={filtered.length} addLabel="Add expense" onAdd={() => { setForm(emptyExpense); setShowForm(true); }} search={search} setSearch={setSearch} searchPlaceholder="Search category or vendor" />
         <div className="overflow-x-auto">
           <table className="min-w-full text-left">
-            <thead className="border-b border-line bg-slate-50/70"><tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500"><th className="px-4 py-2.5 font-semibold">Category</th><th className="px-4 py-2.5 font-semibold">Vendor</th><th className="px-4 py-2.5 font-semibold">Amount</th><th className="px-4 py-2.5 font-semibold">Date</th><th className="px-4 py-2.5 text-right font-semibold">Actions</th></tr></thead>
+            <thead className="border-b border-line bg-slate-50/70"><tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500"><th className="px-4 py-2.5 font-semibold">Category</th><th className="px-4 py-2.5 font-semibold">Vendor</th><th className="px-4 py-2.5 font-semibold">Amount</th><th className="px-4 py-2.5 font-semibold">Status</th><th className="px-4 py-2.5 font-semibold">Date</th><th className="px-4 py-2.5 text-right font-semibold">Actions</th></tr></thead>
             <tbody>
-              {filtered.map((expense) => <tr key={expense.id} className="border-b border-line transition hover:bg-soft/40"><td className="px-4 py-3 text-sm font-semibold text-ink">{expense.category}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{expense.vendor ?? "Internal vendor"}</td><td className="px-4 py-3 text-xs font-semibold text-brand-500 md:text-sm">{expense.currency} {Number(expense.amount).toLocaleString()}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{new Date(expense.incurredAt).toLocaleDateString()}</td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => { setForm({ id: expense.id, category: expense.category, vendor: expense.vendor ?? "", amount: String(Number(expense.amount)), currency: expense.currency, invoiceId: expense.invoiceId ?? "", incurredAt: expense.incurredAt.slice(0, 10) }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button><button onClick={() => setPendingDelete(expense.id)} className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" /><span>Delete</span></button></div></td></tr>)}
-              {filtered.length === 0 ? <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">No expenses match the current search.</td></tr> : null}
+              {filtered.map((expense) => <tr key={expense.id} className="border-b border-line transition hover:bg-soft/40"><td className="px-4 py-3 text-sm font-semibold text-ink">{expense.category}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{expense.vendor ?? "Internal vendor"}</td><td className="px-4 py-3 text-xs font-semibold text-brand-500 md:text-sm">{expense.currency} {Number(expense.amount).toLocaleString()}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{expense.status}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{new Date(expense.incurredAt).toLocaleDateString()}</td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => { setForm({ id: expense.id, category: expense.category, vendor: expense.vendor ?? "", amount: String(Number(expense.amount)), currency: expense.currency, invoiceId: expense.invoiceId ?? "", incurredAt: expense.incurredAt.slice(0, 10), status: expense.status }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button><button onClick={() => setPendingDelete(expense.id)} className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" /><span>Delete</span></button></div></td></tr>)}
+              {filtered.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">No expenses match the current search.</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -1395,22 +1414,32 @@ export function LiveTaxes() {
 export function LiveReportsPage() {
   const { overview, invoices, expenses, payments, settings, vendors, bankAccounts } = useAccountingData();
   const currency = settings?.currency || "ZAR";
-  const profit = (overview?.revenue ?? 0) - (overview?.expenses ?? 0);
-  const rows = [
-    { metric: "Revenue", value: `${currency} ${(overview?.revenue ?? 0).toLocaleString()}` },
-    { metric: "Expenses", value: `${currency} ${(overview?.expenses ?? 0).toLocaleString()}` },
-    { metric: "Net Profit", value: `${currency} ${profit.toLocaleString()}` },
-    { metric: "Outstanding Receivables", value: `${currency} ${(overview?.outstanding ?? 0).toLocaleString()}` },
-    { metric: "Cash Position", value: `${currency} ${(overview?.cash ?? 0).toLocaleString()}` },
-    { metric: "Invoice Count", value: String(invoices.length) },
-    { metric: "Expense Count", value: String(expenses.length) },
-    { metric: "Payment Count", value: String(payments.length) },
-    { metric: "Vendor Count", value: String(vendors.length) },
-    { metric: "Bank Accounts", value: String(bankAccounts.length) },
-  ];
   const [search, setSearch] = useState("");
-  const filtered = rows.filter((row) => `${row.metric} ${row.value}`.toLowerCase().includes(search.trim().toLowerCase()));
-  return <DerivedTable label="Reports" title="Financial reports" description="High-level reporting across the live accounting workspace." rows={filtered} columns={[{ key: "metric", label: "Metric" }, { key: "value", label: "Value", align: "right" }]} search={search} setSearch={setSearch} placeholder="Search report metric" />;
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [reportRows, setReportRows] = useState<Array<Record<string, string>>>([]);
+  const [reportError, setReportError] = useState("");
+  const reportQuery = useMemo(() => { const params = new URLSearchParams(); if (from) params.set("from", from); if (to) params.set("to", to); if (departmentId) params.set("departmentId", departmentId); if (projectId) params.set("projectId", projectId); const value = params.toString(); return value ? `?${value}` : ""; }, [from, to, departmentId, projectId]);
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      apiFetch<{ revenue: number; expenses: number; netIncome: number }>(`/accounting/reports/profit-loss${reportQuery}`),
+      apiFetch<{ assets: number; liabilities: number; equity: number; balanced: boolean }>(`/accounting/reports/balance-sheet${reportQuery}`),
+      apiFetch<{ inflow: number; outflow: number; net: number }>(`/accounting/reports/cash-flow${reportQuery}`),
+      apiFetch<{ outputBase: number; outputTax: number; inputBase: number; netTax: number }>(`/accounting/reports/vat${reportQuery}`),
+    ]).then(([profitLoss, balance, cash, vat]) => { if (!active) return; const money = (value: number) => `${currency} ${value.toLocaleString()}`; setReportRows([{ metric: "Revenue (P&L)", value: money(profitLoss.revenue) }, { metric: "Expenses (P&L)", value: money(profitLoss.expenses) }, { metric: "Net income", value: money(profitLoss.netIncome) }, { metric: "Assets", value: money(balance.assets) }, { metric: "Liabilities", value: money(balance.liabilities) }, { metric: "Equity", value: money(balance.equity) }, { metric: "Ledger balanced", value: balance.balanced ? "Yes" : "No" }, { metric: "Cash inflow", value: money(cash.inflow) }, { metric: "Cash outflow", value: money(cash.outflow) }, { metric: "Net cash flow", value: money(cash.net) }, { metric: "VAT output tax", value: money(vat.outputTax) }, { metric: "VAT net payable", value: money(vat.netTax) }, { metric: "Outstanding receivables", value: money(overview?.outstanding ?? 0) }, { metric: "Invoice count", value: String(invoices.length) }, { metric: "Expense count", value: String(expenses.length) }, { metric: "Payment count", value: String(payments.length) }, { metric: "Vendor count", value: String(vendors.length) }, { metric: "Bank accounts", value: String(bankAccounts.length) }]); }).catch((error) => { if (active) setReportError(parseApiError(error, "Unable to load financial reports.")); });
+    return () => { active = false; };
+  }, [currency, overview?.outstanding, invoices.length, expenses.length, payments.length, vendors.length, bankAccounts.length, reportQuery]);
+  const filtered = reportRows.filter((row) => `${row.metric} ${row.value}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const downloadReport = async (report: "profit-loss" | "cash-flow" | "vat", format: "csv" | "pdf") => {
+    const session = getStoredSession();
+    const response = await fetch(`${API_BASE_URL}${format === "csv" ? `/exports/${report}` : `/accounting/reports/${report}/pdf`}${reportQuery}`, { headers: { Authorization: `Bearer ${session?.token ?? ""}`, "X-Tenant-Id": session?.tenantId ?? "" } });
+    if (!response.ok) throw new Error("Unable to export report.");
+    const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${report}.${format}`; link.click(); URL.revokeObjectURL(url);
+  };
+  return <div className="space-y-3">{reportError && <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{reportError}</p>}<div className="grid gap-2 rounded-2xl border border-line bg-soft/40 p-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-xs font-semibold text-slate-600">From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">Department ID<input value={departmentId} onChange={(event) => setDepartmentId(event.target.value)} placeholder="Optional" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">Project ID<input value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="Optional" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label></div><div className="flex flex-wrap gap-2">{(["profit-loss", "cash-flow", "vat"] as const).map((report) => <span key={report} className="flex gap-2"><button onClick={() => void downloadReport(report, "csv")} className="rounded-xl border border-line px-3 py-2 text-xs font-semibold">Export {report} CSV</button><button onClick={() => void downloadReport(report, "pdf")} className="rounded-xl border border-line px-3 py-2 text-xs font-semibold">Export {report} PDF</button></span>)}</div><DerivedTable label="Reports" title="Financial reports" description="Live profit and loss, balance sheet, cash flow, VAT, and operational accounting metrics." rows={filtered} columns={[{ key: "metric", label: "Metric" }, { key: "value", label: "Value", align: "right" }]} search={search} setSearch={setSearch} placeholder="Search report metric" /></div>;
 }
 
 export function LivePeriodClose() {

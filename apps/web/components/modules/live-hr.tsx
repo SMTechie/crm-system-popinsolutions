@@ -25,16 +25,30 @@ type HrOverview = {
 
 type Employee = {
   id: string;
+  employeeNumber?: string | null;
   fullName: string;
   email: string;
   phone?: string | null;
+  idPassportNumber?: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  address?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
   title: string;
   department?: string | null;
   location?: string | null;
   managerName?: string | null;
   employmentStatus?: string | null;
+  employmentType?: string | null;
   startDate?: string | null;
+  endDate?: string | null;
   salaryAmount?: string | number | null;
+  bankName?: string | null;
+  bankAccountHolder?: string | null;
+  bankAccountNumber?: string | null;
+  bankBranch?: string | null;
+  bankAccountType?: string | null;
   _count?: {
     leaveRequests: number;
     documents: number;
@@ -107,16 +121,30 @@ const today = "2026-08-04";
 
 const emptyEmployee = {
   id: "",
+  employeeNumber: "",
   fullName: "",
   email: "",
   phone: "",
+  idPassportNumber: "",
+  dateOfBirth: "",
+  gender: "",
+  address: "",
+  emergencyContactName: "",
+  emergencyContactPhone: "",
   title: "",
   department: "",
   location: "",
   managerName: "",
   employmentStatus: "ACTIVE",
+  employmentType: "FULL_TIME",
   startDate: today,
+  endDate: "",
   salaryAmount: "",
+  bankName: "",
+  bankAccountHolder: "",
+  bankAccountNumber: "",
+  bankBranch: "",
+  bankAccountType: "",
 };
 
 const emptyLeave = {
@@ -422,9 +450,16 @@ function EmployeeModal({
   return (
     <BaseModal label={form.id ? "Edit Employee" : "Add Employee"} title="Manage employee profile" onClose={onClose} onSave={onSave} saveLabel={form.id ? "Update Employee" : "Save Employee"}>
       <div className="grid gap-3 md:grid-cols-2">
+        <Input value={form.employeeNumber} onChange={(event) => setForm((current) => ({ ...current, employeeNumber: event.target.value }))} placeholder="Employee number (optional)" />
         <Input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" />
         <Input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="Email address" />
         <Input value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone number" />
+        <Input value={form.idPassportNumber} onChange={(event) => setForm((current) => ({ ...current, idPassportNumber: event.target.value }))} placeholder="ID / passport number" />
+        <Input type="date" value={form.dateOfBirth} onChange={(event) => setForm((current) => ({ ...current, dateOfBirth: event.target.value }))} />
+        <Input value={form.gender} onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))} placeholder="Gender" />
+        <Input value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} placeholder="Address" />
+        <Input value={form.emergencyContactName} onChange={(event) => setForm((current) => ({ ...current, emergencyContactName: event.target.value }))} placeholder="Emergency contact name" />
+        <Input value={form.emergencyContactPhone} onChange={(event) => setForm((current) => ({ ...current, emergencyContactPhone: event.target.value }))} placeholder="Emergency contact phone" />
         <Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Job title" />
         <Input value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} placeholder="Department" />
         <Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} placeholder="Location" />
@@ -434,8 +469,17 @@ function EmployeeModal({
             <option key={item} value={item}>{item}</option>
           ))}
         </Select>
+        <Select value={form.employmentType} onChange={(event) => setForm((current) => ({ ...current, employmentType: event.target.value }))}>
+          {["FULL_TIME", "PART_TIME", "CONTRACT", "TEMPORARY", "INTERN"].map((item) => <option key={item} value={item}>{item}</option>)}
+        </Select>
         <Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} />
+        <Input type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} />
         <Input type="number" min="0" step="0.01" value={form.salaryAmount} onChange={(event) => setForm((current) => ({ ...current, salaryAmount: event.target.value }))} placeholder="Monthly salary" />
+        <Input value={form.bankName} onChange={(event) => setForm((current) => ({ ...current, bankName: event.target.value }))} placeholder="Bank" />
+        <Input value={form.bankAccountHolder} onChange={(event) => setForm((current) => ({ ...current, bankAccountHolder: event.target.value }))} placeholder="Account holder" />
+        <Input value={form.bankAccountNumber} onChange={(event) => setForm((current) => ({ ...current, bankAccountNumber: event.target.value }))} placeholder="Account number" />
+        <Input value={form.bankBranch} onChange={(event) => setForm((current) => ({ ...current, bankBranch: event.target.value }))} placeholder="Branch" />
+        <Input value={form.bankAccountType} onChange={(event) => setForm((current) => ({ ...current, bankAccountType: event.target.value }))} placeholder="Account type" />
       </div>
     </BaseModal>
   );
@@ -523,7 +567,7 @@ function ReviewModal({ form, setForm, employees, onClose, onSave }: { form: type
   );
 }
 
-function DocumentModal({ form, setForm, employees, onClose, onSave }: { form: typeof emptyDocument; setForm: Dispatch<SetStateAction<typeof emptyDocument>>; employees: Employee[]; onClose: () => void; onSave: () => void }) {
+function DocumentModal({ form, setForm, employees, selectedFile, setSelectedFile, onClose, onSave }: { form: typeof emptyDocument; setForm: Dispatch<SetStateAction<typeof emptyDocument>>; employees: Employee[]; selectedFile: File | null; setSelectedFile: (file: File | null) => void; onClose: () => void; onSave: () => void }) {
   return (
     <BaseModal label={form.id ? "Edit Document" : "Add Document"} title="Manage employee document" onClose={onClose} onSave={onSave} saveLabel={form.id ? "Update Document" : "Save Document"}>
       <div className="grid gap-3 md:grid-cols-2">
@@ -533,6 +577,7 @@ function DocumentModal({ form, setForm, employees, onClose, onSave }: { form: ty
         </Select>
         <Input value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} placeholder="Document label" />
         <Input value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} placeholder="Category" />
+        {!form.id ? <Input type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,.docx" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} className="md:col-span-2" /> : null}
         <Input value={form.fileKey} onChange={(event) => setForm((current) => ({ ...current, fileKey: event.target.value }))} className="md:col-span-2" placeholder="File URL or storage key" />
         <Input type="date" value={form.expiresAt} onChange={(event) => setForm((current) => ({ ...current, expiresAt: event.target.value }))} />
       </div>
@@ -667,16 +712,30 @@ export function LiveEmployeesPage() {
   async function saveEmployee() {
     try {
       const payload = {
+        employeeNumber: form.employeeNumber || undefined,
         fullName: form.fullName || undefined,
         email: form.email || undefined,
         phone: form.phone || "",
+        idPassportNumber: form.idPassportNumber || "",
+        dateOfBirth: form.dateOfBirth || "",
+        gender: form.gender || "",
+        address: form.address || "",
+        emergencyContactName: form.emergencyContactName || "",
+        emergencyContactPhone: form.emergencyContactPhone || "",
         title: form.title || undefined,
         department: form.department || "",
         location: form.location || "",
         managerName: form.managerName || "",
         employmentStatus: form.employmentStatus || undefined,
+        employmentType: form.employmentType || "",
         startDate: form.startDate || "",
+        endDate: form.endDate || "",
         salaryAmount: form.salaryAmount || "",
+        bankName: form.bankName || "",
+        bankAccountHolder: form.bankAccountHolder || "",
+        bankAccountNumber: form.bankAccountNumber || "",
+        bankBranch: form.bankBranch || "",
+        bankAccountType: form.bankAccountType || "",
       };
       if (form.id) {
         await apiFetch(`/hr/employees/${form.id}`, { method: "PATCH", body: JSON.stringify(payload) });
@@ -733,7 +792,7 @@ export function LiveEmployeesPage() {
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{formatMoney(employee.salaryAmount)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => { setForm({ id: employee.id, fullName: employee.fullName, email: employee.email, phone: employee.phone ?? "", title: employee.title, department: employee.department ?? "", location: employee.location ?? "", managerName: employee.managerName ?? "", employmentStatus: employee.employmentStatus ?? "ACTIVE", startDate: employee.startDate?.slice(0, 10) ?? today, salaryAmount: employee.salaryAmount?.toString() ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
+                      <button onClick={() => { setForm({ ...emptyEmployee, id: employee.id, employeeNumber: employee.employeeNumber ?? "", fullName: employee.fullName, email: employee.email, phone: employee.phone ?? "", idPassportNumber: employee.idPassportNumber ?? "", dateOfBirth: employee.dateOfBirth?.slice(0, 10) ?? "", gender: employee.gender ?? "", address: employee.address ?? "", emergencyContactName: employee.emergencyContactName ?? "", emergencyContactPhone: employee.emergencyContactPhone ?? "", title: employee.title, department: employee.department ?? "", location: employee.location ?? "", managerName: employee.managerName ?? "", employmentStatus: employee.employmentStatus ?? "ACTIVE", employmentType: employee.employmentType ?? "FULL_TIME", startDate: employee.startDate?.slice(0, 10) ?? today, endDate: employee.endDate?.slice(0, 10) ?? "", salaryAmount: employee.salaryAmount?.toString() ?? "", bankName: employee.bankName ?? "", bankAccountHolder: employee.bankAccountHolder ?? "", bankAccountNumber: employee.bankAccountNumber ?? "", bankBranch: employee.bankBranch ?? "", bankAccountType: employee.bankAccountType ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
                       <button onClick={() => setPendingDelete(employee.id)} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
                     </div>
                   </td>
@@ -1148,6 +1207,7 @@ export function LiveDocumentsPage() {
   const [filter, setFilter] = useState("ALL");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyDocument);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const categories = useMemo(() => Array.from(new Set(documents.map((item) => item.category || "General"))).sort(), [documents]);
@@ -1167,10 +1227,22 @@ export function LiveDocumentsPage() {
         await apiFetch(`/hr/documents/${form.id}`, { method: "PATCH", body: JSON.stringify(payload) });
         notify("success", "Document updated successfully.");
       } else {
-        await apiFetch("/hr/documents", { method: "POST", body: JSON.stringify(payload) });
+        if (selectedFile) {
+          const multipart = new FormData();
+          multipart.append("file", selectedFile);
+          if (form.employeeId) multipart.append("employeeId", form.employeeId);
+          if (form.label) multipart.append("label", form.label);
+          if (form.category) multipart.append("category", form.category);
+          const expiry = form.expiresAt ? toDateTime(form.expiresAt) : undefined;
+          if (expiry) multipart.append("expiresAt", expiry);
+          await apiFetch("/hr/documents/upload", { method: "POST", body: multipart });
+        } else {
+          await apiFetch("/hr/documents", { method: "POST", body: JSON.stringify(payload) });
+        }
         notify("success", "Document created successfully.");
       }
       setForm(emptyDocument);
+      setSelectedFile(null);
       setShowForm(false);
       await reload();
     } catch (error) {
@@ -1230,7 +1302,7 @@ export function LiveDocumentsPage() {
           </table>
         </div>
       </Card>
-      {showForm ? <DocumentModal form={form} setForm={setForm} employees={employees} onClose={() => setShowForm(false)} onSave={() => void saveDocument()} /> : null}
+      {showForm ? <DocumentModal form={form} setForm={setForm} employees={employees} selectedFile={selectedFile} setSelectedFile={setSelectedFile} onClose={() => setShowForm(false)} onSave={() => void saveDocument()} /> : null}
       {pendingDelete ? <DeleteModal title="Remove this document?" onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteDocument(pendingDelete)} confirmLabel="Delete Document" /> : null}
       <HrToast toast={toast} />
     </div>

@@ -9,19 +9,33 @@
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
     "db:push": "prisma db push --schema prisma/schema.prisma",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "db:backfill-accounting": "node prisma/backfill-accounting.js",
+    "test": "node --test test/business-rules.test.js",
+    "test:integration": "node test/run-integration.js"
   },
   "dependencies": {
-    "@nestjs/common": "^11.0.1",
-    "@nestjs/core": "^11.0.1",
-    "@nestjs/platform-express": "^11.0.1",
+    "@aws-sdk/client-s3": "^3.1133.0",
+    "@nestjs/common": "^12.0.3",
+    "@nestjs/core": "^12.0.3",
+    "@nestjs/platform-express": "^12.0.3",
     "@prisma/client": "^6.2.1",
+    "@types/nodemailer": "^7.0.12",
+    "@types/pdfkit": "^0.13.9",
+    "@types/qrcode": "^1.5.6",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "multer": "^2.3.0",
+    "nodemailer": "^7.0.13",
+    "pdfkit": "^0.17.2",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "stripe": "^22.4.0"
+    "stripe": "^22.4.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.0",
+    "@nestjs/cli": "^12.0.0",
     "@types/node": "^22.10.1",
     "prisma": "^6.2.1",
     "typescript": "^5.7.2"

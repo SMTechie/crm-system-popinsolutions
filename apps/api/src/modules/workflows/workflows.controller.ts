@@ -4,11 +4,14 @@ import { ModuleAccess } from "../../common/decorators/module-access.decorator";
 import { Tenant } from "../../common/decorators/tenant.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { ModuleAccessGuard } from "../../common/guards/module-access.guard";
+import { PermissionGuard } from "../../common/guards/permission.guard";
+import { RequiresPermission } from "../../common/decorators/permission.decorator";
 import { TenantService } from "../../common/services/tenant.service";
 import { PrismaService } from "../../prisma/prisma.service";
 
-@UseGuards(JwtAuthGuard, ModuleAccessGuard)
+@UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
 @ModuleAccess("automation")
+@RequiresPermission("automation.manage")
 @Controller("workflows")
 export class WorkflowsController {
   constructor(

@@ -15,7 +15,7 @@ async function main() {
     create: {
       name: "Pop In Solutions",
       slug: "demo-tenant",
-      enabledModules: ["crm", "accounting", "hr", "forms", "automation", "settings"],
+      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"],
       planCode: "enterprise",
       subscriptionStatus: "active",
       onboardingCompleted: true,
@@ -47,7 +47,7 @@ async function main() {
   await prisma.tenant.update({
     where: { id: tenant.id },
     data: {
-      enabledModules: ["crm", "accounting", "hr", "forms", "automation", "settings"],
+      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"],
       planCode: "enterprise",
       subscriptionStatus: "active",
       onboardingCompleted: true,
@@ -96,6 +96,57 @@ async function main() {
       passwordHash: hashPassword("PopIn@2026!SuperAdmin"),
     },
   });
+
+  const permissionKeys = [
+    "crm.customers.view", "crm.customers.create", "crm.customers.edit", "accounting.invoices.view",
+    "accounting.invoices.create", "accounting.invoices.approve", "hr.employees.view", "hr.employees.edit",
+    "attendance.view", "attendance.manage", "assets.view", "assets.create", "assets.assign", "assets.return",
+    "projects.view", "projects.manage", "users.view", "users.manage", "reports.view", "settings.manage",
+    "forms.manage", "automation.manage",
+  ];
+  for (const key of permissionKeys) {
+    await prisma.permission.upsert({ where: { tenantId_key: { tenantId: tenant.id, key } }, update: {}, create: { tenantId: tenant.id, key } });
+  }
+  const ownerRole = await prisma.role.upsert({ where: { tenantId_name: { tenantId: tenant.id, name: "Organisation Administrator" } }, update: {}, create: { tenantId: tenant.id, name: "Organisation Administrator", description: "Full access to the organisation workspace." } });
+  const permissions = await prisma.permission.findMany({ where: { tenantId: tenant.id } });
+  for (const permission of permissions) {
+    await prisma.rolePermission.upsert({ where: { roleId_permissionId: { roleId: ownerRole.id, permissionId: permission.id } }, update: {}, create: { roleId: ownerRole.id, permissionId: permission.id } });
+  }
+  await prisma.userRoleAssignment.upsert({ where: { userId_roleId: { userId: user.id, roleId: ownerRole.id } }, update: {}, create: { userId: user.id, roleId: ownerRole.id } });
+  const demoUsers = [];
+  for (const demo of [
+    ["admin@example.com", "Demo Administrator", UserRole.ADMIN],
+    ["finance@example.com", "Demo Finance Manager", UserRole.ACCOUNTANT],
+    ["hr@example.com", "Demo HR Manager", UserRole.HR_MANAGER],
+    ["employee@example.com", "Demo Employee", UserRole.EMPLOYEE],
+  ]) {
+    const demoUser = await prisma.user.upsert({ where: { tenantId_email: { tenantId: tenant.id, email: demo[0] } }, update: { fullName: demo[1], role: demo[2], status: "ACTIVE", emailVerifiedAt: new Date(), passwordHash: hashPassword("PopIn@2026!Demo") }, create: { tenantId: tenant.id, email: demo[0], fullName: demo[1], role: demo[2], status: "ACTIVE", emailVerifiedAt: new Date(), passwordHash: hashPassword("PopIn@2026!Demo") } });
+    demoUsers.push(demoUser);
+  }
+  const demoRolePermissions = {
+    "Demo Administrator": permissionKeys,
+    "Demo Finance Manager": ["accounting.invoices.view", "accounting.invoices.create", "accounting.invoices.approve", "reports.view"],
+    "Demo HR Manager": ["hr.employees.view", "hr.employees.edit", "attendance.view", "attendance.manage"],
+    "Demo Employee": ["attendance.view"],
+  };
+  for (const demoUser of demoUsers) {
+    const roleName = demoUser.fullName;
+    const rolePermissions = demoRolePermissions[roleName] || [];
+    const role = await prisma.role.upsert({ where: { tenantId_name: { tenantId: tenant.id, name: roleName } }, update: {}, create: { tenantId: tenant.id, name: roleName, description: `Seeded ${roleName} role.` } });
+    for (const key of rolePermissions) {
+      const permission = await prisma.permission.findUnique({ where: { tenantId_key: { tenantId: tenant.id, key } } });
+      if (permission) await prisma.rolePermission.upsert({ where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } }, update: {}, create: { roleId: role.id, permissionId: permission.id } });
+    }
+    await prisma.userRoleAssignment.upsert({ where: { userId_roleId: { userId: demoUser.id, roleId: role.id } }, update: {}, create: { userId: demoUser.id, roleId: role.id } });
+  }
+  const employeeDemoUser = demoUsers.find((user) => user.email === "employee@example.com");
+  if (employeeDemoUser) {
+    await prisma.employee.upsert({
+      where: { id: `${tenant.id}-employee-demo` },
+      update: { userId: employeeDemoUser.id, fullName: employeeDemoUser.fullName, email: employeeDemoUser.email, title: "Operations Employee", employmentStatus: "ACTIVE" },
+      create: { id: `${tenant.id}-employee-demo`, tenantId: tenant.id, userId: employeeDemoUser.id, fullName: employeeDemoUser.fullName, email: employeeDemoUser.email, title: "Operations Employee", employmentStatus: "ACTIVE" },
+    });
+  }
 
   const starterTenant = await prisma.tenant.upsert({
     where: { slug: "starter-demo" },
@@ -688,6 +739,32 @@ async function main() {
       },
     });
   }
+
+  const assetCategory = await prisma.assetCategory.upsert({
+    where: { tenantId_name: { tenantId: tenant.id, name: "Computing" } },
+    update: { description: "Laptops, desktops, monitors, and related equipment." },
+    create: { tenantId: tenant.id, name: "Computing", description: "Laptops, desktops, monitors, and related equipment." },
+  });
+  const demoAsset = await prisma.asset.upsert({
+    where: { tenantId_assetTag: { tenantId: tenant.id, assetTag: "POP-LAP-001" } },
+    update: { name: "Dell Latitude 7440", category: "Computing", categoryId: assetCategory.id, status: "ASSIGNED", condition: "GOOD" },
+    create: { tenantId: tenant.id, assetTag: "POP-LAP-001", name: "Dell Latitude 7440", category: "Computing", categoryId: assetCategory.id, manufacturer: "Dell", model: "Latitude 7440", serialNumber: "DEMO-SN-001", purchasePrice: 24500, purchaseDate: new Date("2026-01-15T00:00:00.000Z"), status: "ASSIGNED", condition: "GOOD", location: "Johannesburg" },
+  });
+  await prisma.assetAssignment.upsert({
+    where: { id: `${demoAsset.id}-assignment` },
+    update: { returnedAt: null, employeeId: employee.id },
+    create: { id: `${demoAsset.id}-assignment`, assetId: demoAsset.id, employeeId: employee.id, notes: "Demo onboarding allocation." },
+  });
+  const demoProject = await prisma.project.upsert({
+    where: { id: `${tenant.id}-crm-rollout` },
+    update: { status: "ACTIVE", customer: "Atlas Freight" },
+    create: { id: `${tenant.id}-crm-rollout`, tenantId: tenant.id, name: "Atlas CRM rollout", customer: "Atlas Freight", status: "ACTIVE", budget: 180000, startDate: new Date("2026-08-01T00:00:00.000Z"), endDate: new Date("2026-10-31T00:00:00.000Z"), description: "CRM and workflow implementation for the demo customer." },
+  });
+  await prisma.task.upsert({
+    where: { id: `${demoProject.id}-discovery` },
+    update: { status: "IN_PROGRESS", projectId: demoProject.id, assignedUserId: user.id },
+    create: { id: `${demoProject.id}-discovery`, tenantId: tenant.id, projectId: demoProject.id, title: "Complete discovery workshop", description: "Capture business processes and integration requirements.", status: "IN_PROGRESS", priority: "HIGH", assignedUserId: user.id, dueDate: new Date("2026-09-25T00:00:00.000Z"), estimatedHours: 8 },
+  });
 
   await prisma.formTemplate.upsert({
     where: { slug: "lead-capture-form" },

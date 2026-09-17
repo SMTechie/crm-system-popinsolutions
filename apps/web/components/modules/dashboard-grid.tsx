@@ -7,16 +7,21 @@ import { Card } from "@/components/ui/card";
 import { type ModuleCard } from "@/lib/data";
 import { filterModuleCards } from "@/lib/modules";
 import { getStoredSession } from "@/lib/session";
+import { apiFetch } from "@/lib/api";
+
+type DashboardOverview = { financial: { revenue: number; expenses: number; netIncome: number; outstandingInvoices: number }; crm: { customers: number; leads: number }; hr: { employees: number; attendanceToday: number }; assets: { total: number }; projects: { active: number; openTasks: number } };
 
 export function DashboardGrid() {
   const [activeModule, setActiveModule] = useState<ModuleCard | null>(null);
   const [availableModules, setAvailableModules] = useState<ModuleCard[]>([]);
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
 
   useEffect(() => {
     const session = getStoredSession();
     setAvailableModules(
-      filterModuleCards(session?.enabledModules ?? ["crm", "accounting", "hr", "forms", "automation", "settings"]),
+      filterModuleCards(session?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"]),
     );
+    void apiFetch<DashboardOverview>("/dashboard/overview").then(setOverview).catch(() => setOverview(null));
   }, []);
 
   useEffect(() => {
@@ -32,6 +37,7 @@ export function DashboardGrid() {
 
   return (
     <>
+      {overview ? <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Revenue" value={`R${overview.financial.revenue.toLocaleString()}`} /><Metric label="Outstanding" value={`R${overview.financial.outstandingInvoices.toLocaleString()}`} /><Metric label="Employees" value={String(overview.hr.employees)} /><Metric label="Open tasks" value={String(overview.projects.openTasks)} /></section> : null}
       <section className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
         {availableModules.map((card) => {
           const Icon = card.icon;
@@ -112,3 +118,5 @@ export function DashboardGrid() {
     </>
   );
 }
+
+function Metric({ label, value }: { label: string; value: string }) { return <Card className="p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold text-ink">{value}</p></Card>; }

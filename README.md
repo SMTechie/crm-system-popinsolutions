@@ -29,3 +29,4 @@ This scaffold is designed as a business operating system with:
 - Public form capture and workflow triggers
 - Modular dashboards and extensible data models
 
+See [docs/implementation-status.md](docs/implementation-status.md) for database setup, integration boundaries, and verification instructions.

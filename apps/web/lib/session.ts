@@ -9,6 +9,7 @@ export type SessionUser = {
   tenantName?: string;
   enabledModules: string[];
   token: string;
+  refreshToken?: string;
 };
 
 export function getStoredSession(): SessionUser | null {

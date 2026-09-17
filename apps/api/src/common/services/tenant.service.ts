@@ -1,30 +1,13 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 
 @Injectable()
 export class TenantService {
-  private readonly defaultModules = ["crm", "accounting", "hr", "forms", "automation", "settings"];
-
   constructor(private readonly prisma: PrismaService) {}
 
   async ensureTenant(slug: string) {
-    return this.prisma.tenant.upsert({
-      where: { slug },
-      update: {},
-      create: {
-        name: "Pop In Solutions",
-        slug,
-        enabledModules: this.defaultModules,
-        planCode: "enterprise",
-        subscriptionStatus: "active",
-        onboardingCompleted: true,
-        billingEmail: "billing@popinsolutions.co.za",
-        emailFromName: "Pop In Solutions",
-        emailFromAddress: "support@popinsolutions.co.za",
-        replyToEmail: "support@popinsolutions.co.za",
-        maxUsers: 250,
-        maxStorageGb: 250,
-      },
-    });
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) throw new UnauthorizedException("Workspace not found.");
+    return tenant;
   }
 }

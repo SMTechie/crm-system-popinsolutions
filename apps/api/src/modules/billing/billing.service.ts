@@ -260,6 +260,10 @@ export class BillingService {
     const webhookSecret = this.getStripeWebhookSecret();
     const payload = typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
 
+    if (process.env.NODE_ENV === "production" && (!webhookSecret || !signature)) {
+      throw new BadRequestException("Stripe webhook signature validation is required in production.");
+    }
+
     const event =
       webhookSecret && signature
         ? stripe.webhooks.constructEvent(payload, signature, webhookSecret)

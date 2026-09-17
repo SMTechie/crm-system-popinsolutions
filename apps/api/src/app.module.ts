@@ -9,8 +9,12 @@ import { HrModule } from "./modules/hr/hr.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { WorkflowsModule } from "./modules/workflows/workflows.module";
+import { OperationsModule } from "./modules/operations/operations.module";
+import { IntegrationsModule } from "./modules/integrations/integrations.module";
+import { HealthController } from "./health.controller";
 
 @Module({
-  imports: [PrismaModule, CommonModule, AuthModule, CrmModule, AccountingModule, HrModule, FormsModule, WorkflowsModule, SettingsModule, BillingModule],
+  controllers: [HealthController],
+  imports: [PrismaModule, CommonModule, AuthModule, CrmModule, AccountingModule, HrModule, FormsModule, WorkflowsModule, SettingsModule, BillingModule, OperationsModule, IntegrationsModule],
 })
 export class AppModule {}

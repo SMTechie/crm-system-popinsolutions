@@ -16,7 +16,7 @@ import {
   ShieldCheck,
   Users2,
 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { moduleCards } from "@/lib/data";
 import { filterModuleCards } from "@/lib/modules";
 import { navItems } from "@/lib/navigation";
@@ -33,6 +33,7 @@ type NotificationItem = {
   detail: string;
   href: string;
 };
+type SearchResult = { type: string; id: string; label: string; detail?: string };
 
 const THEME_KEY = "popin-theme";
 
@@ -46,15 +47,27 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationStatus, setNotificationStatus] = useState("Loading activity...");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
   const quickRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
   const submenuRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
 
   function signOut() {
+    if (user?.refreshToken) void fetch(`${API_BASE_URL}/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${user.refreshToken}` } }).catch(() => undefined);
     clearSession();
     router.replace("/login");
   }
+
+  useEffect(() => {
+    function handleSearchShortcut(event: KeyboardEvent) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); searchRef.current?.focus(); }
+    }
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
 
   useEffect(() => {
     const storedTheme =
@@ -63,6 +76,13 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
     setTheme(nextTheme);
     document.documentElement.dataset.theme = nextTheme;
   }, []);
+
+  useEffect(() => {
+    if (!searchQuery.trim()) { setSearchResults([]); return; }
+    const controller = new AbortController();
+    void apiFetch<{ items: SearchResult[] }>(`/search?q=${encodeURIComponent(searchQuery.trim())}`, { signal: controller.signal }).then((result) => setSearchResults(result.items)).catch((error: unknown) => { if ((error as { name?: string }).name !== "AbortError") setSearchResults([]); });
+    return () => controller.abort();
+  }, [searchQuery]);
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
@@ -102,7 +122,7 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
 
       try {
         const items: NotificationItem[] = [];
-        const enabledModules = user.enabledModules ?? ["crm", "accounting", "hr", "forms", "automation", "settings"];
+        const enabledModules = user.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"];
         const requests: Array<Promise<void>> = [];
 
         if (enabledModules.includes("crm")) {
@@ -182,7 +202,7 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
   }
 
   const enabledModuleCards = useMemo(
-    () => filterModuleCards(user?.enabledModules ?? ["crm", "accounting", "hr", "forms", "automation", "settings"]),
+    () => filterModuleCards(user?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"]),
     [user?.enabledModules],
   );
   const enabledNavItems = useMemo(
@@ -226,6 +246,7 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
             </div>
           </div>
           <div className="theme-surface flex flex-wrap items-center gap-3 rounded-[22px] border border-line bg-white px-2 py-2 shadow-[0_6px_18px_rgba(61,93,154,0.08)]">
+            <div className="relative order-last w-full xl:order-none xl:w-[240px]"><input ref={searchRef} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search (Ctrl K)" className="w-full rounded-2xl border border-line px-3 py-2 text-sm outline-none focus:border-brand-500" aria-label="Global search" />{searchQuery && <div className="theme-surface absolute left-0 top-[calc(100%+8px)] z-30 max-h-80 w-full overflow-y-auto rounded-2xl border border-line bg-white p-2 shadow-panel">{searchResults.length ? searchResults.map((result) => <div key={`${result.type}-${result.id}`} className="rounded-xl px-3 py-2 hover:bg-soft"><p className="text-sm font-semibold text-ink">{result.label}</p><p className="text-xs text-slate-500">{result.type}{result.detail ? ` · ${result.detail}` : ""}</p></div>) : <p className="px-3 py-2 text-xs text-slate-500">No matches.</p>}</div>}</div>
             <div ref={notificationsRef} className="relative">
               <button
                 onClick={() => setNotificationsOpen((current) => !current)}

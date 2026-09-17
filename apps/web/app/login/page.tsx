@@ -7,6 +7,7 @@ import { storeSession, getStoredSession } from "@/lib/session";
 
 type AuthSession = {
   accessToken: string;
+  refreshToken?: string;
   user: { id: string; email: string; name: string; role: string; tenantId: string; tenantName?: string; enabledModules?: string[] };
 };
 
@@ -22,6 +23,18 @@ export default function LoginPage() {
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupError, setSignupError] = useState("");
   const [availabilityMessage, setAvailabilityMessage] = useState("");
+
+  const startOAuth = async (provider: "google" | "microsoft") => {
+    setError("");
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/oauth/${provider}`, { headers: { "X-Workspace-Slug": workspaceSlug } });
+      const result = await response.json() as { url?: string; message?: string };
+      if (!response.ok || !result.url) throw new Error(result.message || `${provider} sign-in is not configured.`);
+      window.location.assign(result.url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to start OAuth sign-in.");
+    }
+  };
   const [signupForm, setSignupForm] = useState({
     workspaceName: "",
     workspaceSlug: "",
@@ -49,8 +62,9 @@ export default function LoginPage() {
       role: session.user.role,
       tenantId: session.user.tenantId,
       tenantName: session.user.tenantName,
-      enabledModules: session.user.enabledModules ?? ["crm", "accounting", "hr", "forms", "automation", "settings"],
+      enabledModules: session.user.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"],
       token: session.accessToken,
+      refreshToken: session.refreshToken,
     });
     router.push(nextRoute);
   }
@@ -221,6 +235,10 @@ export default function LoginPage() {
               <p className="text-center text-[11px] text-slate-500 md:text-xs">
                 Use your live workspace credentials to continue.
               </p>
+              <div className="grid w-full gap-2 sm:grid-cols-2">
+                <button type="button" onClick={() => void startOAuth("google")} className="rounded-full border border-line px-4 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-soft">Continue with Google</button>
+                <button type="button" onClick={() => void startOAuth("microsoft")} className="rounded-full border border-line px-4 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-soft">Continue with Microsoft</button>
+              </div>
               <button
                 type="button"
                 onClick={() => {

@@ -4,6 +4,8 @@ import { ModuleAccess } from "../../common/decorators/module-access.decorator";
 import { Tenant } from "../../common/decorators/tenant.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { ModuleAccessGuard } from "../../common/guards/module-access.guard";
+import { PermissionGuard } from "../../common/guards/permission.guard";
+import { RequiresPermission } from "../../common/decorators/permission.decorator";
 import { TenantService } from "../../common/services/tenant.service";
 import { PrismaService } from "../../prisma/prisma.service";
 
@@ -107,8 +109,9 @@ export class FormsController {
     return { tenantId: tenant.slug, items };
   }
 
-  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
   @ModuleAccess("forms")
+  @RequiresPermission("forms.manage")
   @Post()
   async create(
     @Tenant() tenantId: string,
@@ -149,8 +152,9 @@ export class FormsController {
     return { status: "created", item };
   }
 
-  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
   @ModuleAccess("forms")
+  @RequiresPermission("forms.manage")
   @Patch(":formId")
   async update(
     @Tenant() tenantId: string,
@@ -186,8 +190,9 @@ export class FormsController {
     return { status: "updated", item };
   }
 
-  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
   @ModuleAccess("forms")
+  @RequiresPermission("forms.manage")
   @Delete(":formId")
   async delete(@Tenant() tenantId: string, @Param("formId") formId: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
@@ -202,8 +207,9 @@ export class FormsController {
     return { status: "deleted", formId };
   }
 
-  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
   @ModuleAccess("forms")
+  @RequiresPermission("forms.manage")
   @Post(":formId/publish")
   async publish(@Tenant() tenantId: string, @Param("formId") formId: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
@@ -215,8 +221,9 @@ export class FormsController {
     return { formId, status: "published", item };
   }
 
-  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
   @ModuleAccess("forms")
+  @RequiresPermission("forms.manage")
   @Post(":formId/unpublish")
   async unpublish(@Tenant() tenantId: string, @Param("formId") formId: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
@@ -228,8 +235,9 @@ export class FormsController {
     return { formId, status: "unpublished", item };
   }
 
-  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
   @ModuleAccess("forms")
+  @RequiresPermission("forms.manage")
   @Post(":formId/responses")
   async createInternalResponse(
     @Tenant() tenantId: string,
@@ -269,8 +277,9 @@ export class FormsController {
     return { formId, status: "received", item };
   }
 
-  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
   @ModuleAccess("forms")
+  @RequiresPermission("forms.manage")
   @Delete("responses/:responseId")
   async deleteResponse(@Tenant() tenantId: string, @Param("responseId") responseId: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);

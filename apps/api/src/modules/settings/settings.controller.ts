@@ -1,15 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { UserRole } from "@prisma/client";
 import { AuthService } from "../auth/auth.service";
 import { Tenant } from "../../common/decorators/tenant.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { TenantService } from "../../common/services/tenant.service";
 import { PrismaService } from "../../prisma/prisma.service";
+import { PermissionGuard } from "../../common/guards/permission.guard";
+import { RequiresPermission } from "../../common/decorators/permission.decorator";
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller("settings")
 export class SettingsController {
-  private readonly allowedModules = ["crm", "accounting", "hr", "forms", "automation", "settings"] as const;
+  private readonly allowedModules = ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"] as const;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -20,13 +22,19 @@ export class SettingsController {
   private normalizeRole(role?: string): UserRole {
     const normalized = role?.toUpperCase();
     if (
+      normalized === "SUPER_ADMIN" ||
+      normalized === "ORGANISATION_ADMIN" ||
       normalized === "OWNER" ||
       normalized === "ADMIN" ||
+      normalized === "FINANCE_MANAGER" ||
       normalized === "SALES_MANAGER" ||
       normalized === "ACCOUNTANT" ||
       normalized === "HR_MANAGER" ||
+      normalized === "PROJECT_MANAGER" ||
+      normalized === "IT_MANAGER" ||
       normalized === "AGENT" ||
-      normalized === "EMPLOYEE"
+      normalized === "EMPLOYEE" ||
+      normalized === "VIEWER"
     ) {
       return normalized;
     }
@@ -187,6 +195,7 @@ export class SettingsController {
   }
 
   @Patch()
+  @RequiresPermission("settings.manage")
   async updateSettings(
     @Tenant() tenantId: string,
     @Body()
@@ -313,6 +322,7 @@ export class SettingsController {
   }
 
   @Post("team")
+  @RequiresPermission("users.manage")
   async createTeamMember(
     @Tenant() tenantId: string,
     @Body()
@@ -324,12 +334,13 @@ export class SettingsController {
     },
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
-    const password = body.password && body.password.length >= 10 ? body.password : `PopIn@2026!User`;
+    if (!body.email?.trim() || !body.fullName?.trim() || !body.password || body.password.length < 10) throw new BadRequestException("Full name, email, and a password of at least 10 characters are required.");
+    const password = body.password;
     const item = await this.prisma.user.create({
       data: {
         tenantId: tenant.id,
-        email: body.email ?? `user+${Date.now()}@popinsolutions.co.za`,
-        fullName: body.fullName ?? `Team Member ${Date.now()}`,
+        email: body.email.trim().toLowerCase(),
+        fullName: body.fullName.trim(),
         role: this.normalizeRole(body.role),
         passwordHash: this.authService.hashPassword(password),
       },
@@ -353,11 +364,12 @@ export class SettingsController {
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       },
-      generatedPassword: body.password ? null : password,
+      generatedPassword: null,
     };
   }
 
   @Patch("team/:userId")
+  @RequiresPermission("users.manage")
   async updateTeamMember(
     @Tenant() tenantId: string,
     @Param("userId") userId: string,
@@ -408,6 +420,7 @@ export class SettingsController {
   }
 
   @Delete("team/:userId")
+  @RequiresPermission("users.manage")
   async deleteTeamMember(@Tenant() tenantId: string, @Param("userId") userId: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
     const existing = await this.prisma.user.findFirst({

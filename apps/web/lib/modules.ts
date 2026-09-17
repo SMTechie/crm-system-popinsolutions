@@ -1,11 +1,15 @@
 import { moduleCards, type ModuleCard } from "@/lib/data";
 
-export type ModuleKey = "crm" | "accounting" | "hr" | "forms" | "automation" | "settings";
+export type ModuleKey = "crm" | "accounting" | "hr" | "attendance" | "assets" | "projects" | "users" | "forms" | "automation" | "settings";
 
 const routeToModuleKey: Array<{ prefix: string; key: ModuleKey }> = [
   { prefix: "/crm", key: "crm" },
   { prefix: "/accounting", key: "accounting" },
   { prefix: "/hr", key: "hr" },
+  { prefix: "/attendance", key: "attendance" },
+  { prefix: "/assets", key: "assets" },
+  { prefix: "/projects", key: "projects" },
+  { prefix: "/settings/team", key: "users" },
   { prefix: "/forms", key: "forms" },
   { prefix: "/automation", key: "automation" },
   { prefix: "/settings", key: "settings" },
