@@ -28,7 +28,6 @@ type PermissionMember = {
     hr: string;
     attendance: string;
     assets: string;
-    projects: string;
     users: string;
     settings: string;
   };
@@ -40,7 +39,6 @@ const permissionModules = [
   { key: "hr", label: "HR" },
   { key: "attendance", label: "Attendance" },
   { key: "assets", label: "Assets" },
-  { key: "projects", label: "Projects" },
   { key: "users", label: "Users" },
   { key: "settings", label: "Settings" },
 ] as const;
@@ -164,6 +162,9 @@ const saasModules = [
   { key: "crm", label: "CRM", description: "Contacts, companies, deals, activities, tasks, notes, pipeline" },
   { key: "accounting", label: "Accounting", description: "Quotes, invoices, expenses, payments, reports, vendors" },
   { key: "hr", label: "HR", description: "Employees, leave, payroll, attendance, reviews, documents" },
+  { key: "attendance", label: "Attendance", description: "Clock-in, clock-out, location, QR access, and attendance reporting" },
+  { key: "assets", label: "Assets", description: "IT equipment, inventory, assignments, maintenance, and QR identification" },
+  { key: "users", label: "Users", description: "Team access, employee login linking, roles, and account management" },
   { key: "settings", label: "Settings", description: "Tenant admin and workspace controls" },
 ] as const;
 
@@ -532,7 +533,7 @@ export function LiveWorkspaceSettingsPage() {
     allowLocalAuth: true,
     sessionTimeoutMinutes: "480",
   });
-  const [enabledModules, setEnabledModules] = useState<string[]>(["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"]);
+  const [enabledModules, setEnabledModules] = useState<string[]>(["crm", "accounting", "hr", "attendance", "assets", "users", "settings"]);
   const [logoUploading, setLogoUploading] = useState(false);
 
   useEffect(() => {
@@ -1009,8 +1010,6 @@ export function LiveBillingSettingsPage() {
               <div className="mt-3 grid gap-2 text-sm text-slate-600 sm:grid-cols-2">
                 <p>{data ? `${data.usage.crmContacts} CRM contacts` : "Loading..."}</p>
                 <p>{data ? `${data.usage.crmCompanies} CRM companies` : "Loading..."}</p>
-                <p>{data ? `${data.usage.forms} forms` : "Loading..."}</p>
-                <p>{data ? `${data.usage.workflows} workflows` : "Loading..."}</p>
                 <p>{data ? `${data.usage.invoices} invoices` : "Loading..."}</p>
                 <p>{data ? `${data.usage.expenses} expenses` : "Loading..."}</p>
               </div>

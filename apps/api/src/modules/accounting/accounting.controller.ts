@@ -159,6 +159,30 @@ export class AccountingController {
     return { tenantId: tenant.slug, items, meta: { page: pagination.page, pageSize: pagination.pageSize, total, pageCount: Math.ceil(total / pagination.pageSize) } };
   }
 
+  @Get("contributions")
+  @RequiresPermission("accounting.invoices.view")
+  async contributions(@Tenant() tenantId: string, @Query("period") period?: string) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    const selectedPeriod = period && /^\d{4}-\d{2}$/.test(period) ? period : new Date().toISOString().slice(0, 7);
+    const contacts = await this.prisma.contact.findMany({ where: { tenantId: tenant.id, contributionActive: true, monthlyContribution: { not: null } }, include: { company: true, contributionPayments: { where: { period: selectedPeriod } } }, orderBy: [{ company: { name: "asc" } }, { surname: "asc" }, { fullName: "asc" }] });
+    return { period: selectedPeriod, items: contacts.map((contact) => { const payment = contact.contributionPayments[0]; return { id: contact.id, name: contact.fullName, initials: contact.initials, employeeNumber: contact.employeeNumber, company: contact.company?.name ?? "Unlinked", amountDue: Number(contact.monthlyContribution ?? 0), amountPaid: Number(payment?.amountPaid ?? 0), status: payment?.status ?? "UNPAID", paidAt: payment?.paidAt ?? null, reference: payment?.reference ?? null, notes: payment?.notes ?? null }; }) };
+  }
+
+  @Post("contributions/:contactId/mark")
+  @RequiresPermission("accounting.invoices.create")
+  async markContribution(@Tenant() tenantId: string, @Param("contactId") contactId: string, @Body() body: { period?: string; status?: string; amountPaid?: number; paidAt?: string; reference?: string; notes?: string }) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    const period = body.period;
+    if (!period || !/^\d{4}-\d{2}$/.test(period)) throw new BadRequestException("A valid contribution month is required.");
+    const contact = await this.prisma.contact.findFirst({ where: { tenantId: tenant.id, id: contactId, contributionActive: true, monthlyContribution: { not: null } } });
+    if (!contact) throw new BadRequestException("Client contribution profile not found.");
+    const amountPaid = Math.max(0, Number(body.amountPaid ?? 0));
+    const amountDue = Number(contact.monthlyContribution ?? 0);
+    const status = body.status?.toUpperCase() === "PAID" ? "PAID" : body.status?.toUpperCase() === "PARTIAL" ? "PARTIAL" : amountPaid >= amountDue && amountDue > 0 ? "PAID" : amountPaid > 0 ? "PARTIAL" : "UNPAID";
+    const item = await this.prisma.contributionPayment.upsert({ where: { tenantId_contactId_period: { tenantId: tenant.id, contactId: contact.id, period } }, update: { amountDue: new Prisma.Decimal(amountDue), amountPaid: new Prisma.Decimal(amountPaid), status, paidAt: status === "UNPAID" ? null : body.paidAt ? new Date(body.paidAt) : new Date(), reference: body.reference || null, notes: body.notes || null }, create: { tenantId: tenant.id, contactId: contact.id, period, amountDue: new Prisma.Decimal(amountDue), amountPaid: new Prisma.Decimal(amountPaid), status, paidAt: status === "UNPAID" ? null : body.paidAt ? new Date(body.paidAt) : new Date(), reference: body.reference || null, notes: body.notes || null } });
+    return { item };
+  }
+
   @Get("vendors")
   @RequiresPermission("accounting.invoices.view")
   async vendors(@Tenant() tenantId: string) {

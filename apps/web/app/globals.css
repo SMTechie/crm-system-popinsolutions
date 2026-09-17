@@ -176,3 +176,35 @@ html[data-theme="dark"] .border-slate-100,
 html[data-theme="dark"] .border-slate-200 {
   border-color: rgb(var(--color-line)) !important;
 }
+
+#wifi-loader {
+  --front-color: #315bea;
+  --back-color: #d4dcf3;
+  width: 86px;
+  height: 86px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#wifi-loader svg { position: absolute; display: flex; align-items: center; justify-content: center; }
+#wifi-loader svg circle { fill: none; stroke-width: 6px; stroke-linecap: round; stroke-linejoin: round; transform: rotate(-100deg); transform-origin: center; }
+#wifi-loader svg circle.back { stroke: var(--back-color); }
+#wifi-loader svg circle.front { stroke: var(--front-color); }
+#wifi-loader svg.circle-outer { width: 86px; height: 86px; }
+#wifi-loader svg.circle-outer circle { stroke-dasharray: 62.75 188.25; }
+#wifi-loader svg.circle-outer circle.back { animation: wifi-circle-outer 1.8s ease infinite 0.3s; }
+#wifi-loader svg.circle-outer circle.front { animation: wifi-circle-outer 1.8s ease infinite 0.15s; }
+#wifi-loader svg.circle-middle { width: 60px; height: 60px; }
+#wifi-loader svg.circle-middle circle { stroke-dasharray: 42.5 127.5; }
+#wifi-loader svg.circle-middle circle.back { animation: wifi-circle-middle 1.8s ease infinite 0.25s; }
+#wifi-loader svg.circle-middle circle.front { animation: wifi-circle-middle 1.8s ease infinite 0.1s; }
+#wifi-loader svg.circle-inner { width: 34px; height: 34px; }
+#wifi-loader svg.circle-inner circle { stroke-dasharray: 22 66; }
+#wifi-loader svg.circle-inner circle.back { animation: wifi-circle-inner 1.8s ease infinite 0.2s; }
+#wifi-loader svg.circle-inner circle.front { animation: wifi-circle-inner 1.8s ease infinite 0.05s; }
+
+@keyframes wifi-circle-outer { 0% { stroke-dashoffset: 25; } 25% { stroke-dashoffset: 0; } 65% { stroke-dashoffset: 301; } 80%, 100% { stroke-dashoffset: 276; } }
+@keyframes wifi-circle-middle { 0% { stroke-dashoffset: 17; } 25% { stroke-dashoffset: 0; } 65% { stroke-dashoffset: 204; } 80%, 100% { stroke-dashoffset: 187; } }
+@keyframes wifi-circle-inner { 0% { stroke-dashoffset: 9; } 25% { stroke-dashoffset: 0; } 65% { stroke-dashoffset: 106; } 80%, 100% { stroke-dashoffset: 97; } }

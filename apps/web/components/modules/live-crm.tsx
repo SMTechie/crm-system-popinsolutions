@@ -23,6 +23,13 @@ type Deal = {
 type Contact = {
   id: string;
   fullName: string;
+  firstName?: string | null;
+  surname?: string | null;
+  initials?: string | null;
+  employeeNumber?: string | null;
+  contributions?: string | null;
+  monthlyContribution?: string | number | null;
+  contributionStartDate?: string | null;
   email?: string | null;
   phone?: string | null;
   companyId?: string | null;
@@ -55,7 +62,7 @@ type Company = {
 };
 
 const emptyDeal = { id: "", title: "", amount: "", stage: "NEW", currency: "ZAR", companyId: "", caseType: "COURT", caseNumber: "", courtName: "", nextHearingDate: "", caseNotes: "" };
-const emptyContact = { id: "", fullName: "", email: "", phone: "", companyId: "", tags: "website,automation" };
+const emptyContact = { id: "", firstName: "", surname: "", initials: "", employeeNumber: "", contributions: "", monthlyContribution: "", contributionStartDate: "", fullName: "", email: "", phone: "", companyId: "", tags: "" };
 const emptyActivity = {
   id: "",
   title: "",
@@ -164,7 +171,13 @@ export function LiveCrm() {
   async function saveContact() {
     try {
       const payload = {
-        fullName: contactForm.fullName || undefined,
+        firstName: contactForm.firstName || undefined,
+        surname: contactForm.surname || undefined,
+        initials: contactForm.initials || undefined,
+        employeeNumber: contactForm.employeeNumber || undefined,
+        contributions: contactForm.contributions || undefined,
+        monthlyContribution: contactForm.monthlyContribution ? Number(contactForm.monthlyContribution) : null,
+        contributionStartDate: contactForm.contributionStartDate || null,
         email: contactForm.email || undefined,
         phone: contactForm.phone || undefined,
         companyId: contactForm.companyId || "",
@@ -379,6 +392,13 @@ export function LiveCrm() {
                             event.stopPropagation();
                             setContactForm({
                               id: contact.id,
+                              firstName: contact.firstName ?? contact.fullName.split(" ")[0] ?? "",
+                              surname: contact.surname ?? contact.fullName.split(" ").slice(1).join(" "),
+                              initials: contact.initials ?? "",
+                              employeeNumber: contact.employeeNumber ?? "",
+                              contributions: contact.contributions ?? "",
+                              monthlyContribution: contact.monthlyContribution ? String(contact.monthlyContribution) : "",
+                              contributionStartDate: contact.contributionStartDate?.slice(0, 10) ?? "",
                               fullName: contact.fullName,
                               email: contact.email ?? "",
                               phone: contact.phone ?? "",
@@ -434,7 +454,7 @@ export function LiveCrm() {
               <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Tags</p><div className="mt-2 flex flex-wrap gap-1.5">{selectedContact.tags.length ? selectedContact.tags.map((tag) => <span key={tag} className="rounded-full bg-brand-50 px-2 py-1 text-[10px] font-semibold text-brand-500">{tag}</span>) : <span className="text-sm text-slate-400">No tags</span>}</div></div>
             </div>
             <div className="flex justify-end gap-3 border-t border-line px-6 py-4">
-              <button onClick={() => { setSelectedContact(null); setContactForm({ id: selectedContact.id, fullName: selectedContact.fullName, email: selectedContact.email ?? "", phone: selectedContact.phone ?? "", companyId: selectedContact.companyId ?? "", tags: selectedContact.tags.join(", ") }); setShowContactForm(true); }} className="rounded-2xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white">Edit contact</button>
+              <button onClick={() => { setSelectedContact(null); setContactForm({ id: selectedContact.id, firstName: selectedContact.firstName ?? selectedContact.fullName.split(" ")[0] ?? "", surname: selectedContact.surname ?? selectedContact.fullName.split(" ").slice(1).join(" "), initials: selectedContact.initials ?? "", employeeNumber: selectedContact.employeeNumber ?? "", contributions: selectedContact.contributions ?? "", monthlyContribution: selectedContact.monthlyContribution ? String(selectedContact.monthlyContribution) : "", contributionStartDate: selectedContact.contributionStartDate?.slice(0, 10) ?? "", fullName: selectedContact.fullName, email: selectedContact.email ?? "", phone: selectedContact.phone ?? "", companyId: selectedContact.companyId ?? "", tags: selectedContact.tags.join(", ") }); setShowContactForm(true); }} className="rounded-2xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white">Edit contact</button>
             </div>
           </div>
         </div>
@@ -574,12 +594,12 @@ export function LiveCrm() {
             </div>
 
             <div className="space-y-3 px-6 py-5">
-              <input
-                value={contactForm.fullName}
-                onChange={(event) => setContactForm((current) => ({ ...current, fullName: event.target.value }))}
-                placeholder="Full name"
-                className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500"
-              />
+              <div className="grid gap-3 md:grid-cols-2">
+                <input required value={contactForm.firstName} onChange={(event) => setContactForm((current) => ({ ...current, firstName: event.target.value }))} placeholder="Name" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+                <input required value={contactForm.surname} onChange={(event) => setContactForm((current) => ({ ...current, surname: event.target.value }))} placeholder="Surname" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+                <input required value={contactForm.initials} onChange={(event) => setContactForm((current) => ({ ...current, initials: event.target.value.toUpperCase() }))} placeholder="Initials" className="w-full rounded-2xl border border-line px-4 py-3 text-sm uppercase outline-none transition focus:border-brand-500" />
+                <input required value={contactForm.employeeNumber} onChange={(event) => setContactForm((current) => ({ ...current, employeeNumber: event.target.value }))} placeholder="Employee number" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+              </div>
               <input
                 value={contactForm.email}
                 onChange={(event) => setContactForm((current) => ({ ...current, email: event.target.value }))}
@@ -593,6 +613,7 @@ export function LiveCrm() {
                 className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500"
               />
               <select
+                required
                 value={contactForm.companyId}
                 onChange={(event) => setContactForm((current) => ({ ...current, companyId: event.target.value }))}
                 className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500"
@@ -600,6 +621,20 @@ export function LiveCrm() {
                 <option value="">Unlinked company</option>
                 {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
               </select>
+              <div className="rounded-2xl border border-line bg-soft/40 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Monthly contribution</p>
+                <p className="mt-1 text-xs text-slate-500">Record the recurring amount that should appear in the Contributions register.</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-slate-600">Contribution amount (ZAR)</span>
+                    <input type="number" min="0" step="0.01" value={contactForm.monthlyContribution} onChange={(event) => setContactForm((current) => ({ ...current, monthlyContribution: event.target.value }))} placeholder="e.g. 250.00" className="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-slate-600">Contribution start date</span>
+                    <input type="date" value={contactForm.contributionStartDate} onChange={(event) => setContactForm((current) => ({ ...current, contributionStartDate: event.target.value }))} className="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+                  </label>
+                </div>
+              </div>
               <input
                 value={contactForm.tags}
                 onChange={(event) => setContactForm((current) => ({ ...current, tags: event.target.value }))}

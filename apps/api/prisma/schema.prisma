@@ -63,7 +63,7 @@ model Tenant {
   name                    String
   slug                    String                   @unique
   attendanceQrToken       String?                  @unique
-  enabledModules          String[]                 @default(["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"])
+  enabledModules          String[]                 @default(["crm", "accounting", "hr", "attendance", "assets", "users", "settings"])
   planCode                String                   @default("enterprise")
   subscriptionStatus      String                   @default("active")
   onboardingCompleted     Boolean                  @default(true)
@@ -103,6 +103,7 @@ model Tenant {
   quotes                  Quote[]
   expenses                Expense[]
   vendors                 Vendor[]
+  contributionPayments    ContributionPayment[]
   bankAccounts            BankAccount[]
   chartAccounts           ChartAccount[]
   taxRates                TaxRate[]
@@ -329,6 +330,14 @@ model Contact {
   companyId         String?
   company           Company?   @relation(fields: [companyId], references: [id])
   fullName          String
+  firstName         String?
+  surname           String?
+  initials          String?
+  employeeNumber    String?
+  contributions     String?
+  monthlyContribution Decimal? @db.Decimal(14, 2)
+  contributionStartDate DateTime?
+  contributionActive Boolean @default(true)
   email             String?
   phone             String?
   address           String?
@@ -339,6 +348,7 @@ model Contact {
   notes             Note[]
   activities        Activity[]
   invoices          Invoice[]
+  contributionPayments ContributionPayment[]
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
@@ -450,6 +460,26 @@ model Payment {
   reference  String?
   amount     Decimal  @db.Decimal(14, 2)
   receivedAt DateTime
+}
+
+model ContributionPayment {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId  String
+  contact    Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  period     String
+  amountDue  Decimal  @db.Decimal(14, 2)
+  amountPaid Decimal  @default(0) @db.Decimal(14, 2)
+  status     String   @default("UNPAID")
+  paidAt     DateTime?
+  reference  String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, contactId, period])
+  @@index([tenantId, period, status])
 }
 
 model Vendor {

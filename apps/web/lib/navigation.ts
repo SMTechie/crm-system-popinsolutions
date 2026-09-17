@@ -4,7 +4,6 @@ import {
   Settings2,
   ShieldCheck,
   Users2,
-  BriefcaseBusiness,
   ClipboardCheck,
   Laptop,
 } from "lucide-react";
@@ -16,7 +15,6 @@ export const navItems = [
   { href: "/hr", label: "HR", icon: ShieldCheck },
   { href: "/attendance", label: "Attendance", icon: ClipboardCheck },
   { href: "/assets", label: "Assets", icon: Laptop },
-  { href: "/projects", label: "Projects", icon: BriefcaseBusiness },
   { href: "/settings/team", label: "Users", icon: Users2 },
   { href: "/settings", label: "Settings", icon: Settings2 },
 ];

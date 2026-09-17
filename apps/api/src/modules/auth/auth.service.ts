@@ -27,7 +27,7 @@ export class AuthService {
       trialDays: 14,
     },
     enterprise: {
-      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"],
+      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "users", "settings"],
       maxUsers: 250,
       maxStorageGb: 250,
       trialDays: 30,

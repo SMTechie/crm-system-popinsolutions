@@ -15,12 +15,18 @@ import {
   LiveTransactions,
   LiveVendors,
 } from "@/components/modules/live-accounting-pages";
+import { ContributionsRegister } from "@/components/modules/contributions-register";
 
 const accountingSubmodules: Record<string, { title: string; description: string; component: ReactNode }> = {
   invoices: {
     title: "Accounting Invoices",
     description: "Create, review, and update quotes, invoices, and live billing records.",
     component: <LiveInvoices />,
+  },
+  contributions: {
+    title: "Monthly Contributions",
+    description: "Track recurring client contributions and mark monthly payment status.",
+    component: <ContributionsRegister />,
   },
   quotes: {
     title: "Accounting Quotes",

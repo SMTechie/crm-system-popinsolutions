@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { moduleCards } from "@/lib/data";
-import { filterModuleCards } from "@/lib/modules";
+import { filterModuleCards, getAccessibleModules } from "@/lib/modules";
 import { navItems } from "@/lib/navigation";
 import { clearSession, type SessionUser } from "@/lib/session";
 
@@ -99,7 +99,7 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
 
       try {
         const items: NotificationItem[] = [];
-        const enabledModules = user.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"];
+        const enabledModules = getAccessibleModules(user.role, user.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "users", "settings"]);
         const requests: Array<Promise<void>> = [];
 
         if (enabledModules.includes("crm")) {
@@ -167,7 +167,7 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
     }
 
     void loadNotifications();
-  }, [user?.enabledModules, user?.token]);
+  }, [user?.enabledModules, user?.role, user?.token]);
 
   function toggleTheme() {
     const nextTheme = theme === "light" ? "dark" : "light";
@@ -179,14 +179,13 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
   }
 
   const enabledModuleCards = useMemo(
-    () => filterModuleCards(user?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"]),
-    [user?.enabledModules],
+    () => filterModuleCards(getAccessibleModules(user?.role, user?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "users", "settings"])),
+    [user?.enabledModules, user?.role],
   );
   const enabledNavItems = useMemo(
     () =>
       navItems.filter((item) =>
-        item.href === "/dashboard" ||
-        item.href === "/settings" ||
+      item.href === "/dashboard" ||
         enabledModuleCards.some((card) => item.href === card.href || item.href.startsWith(card.href)),
       ),
     [enabledModuleCards],

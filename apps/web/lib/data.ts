@@ -71,6 +71,7 @@ export const moduleCards: ModuleCard[] = [
       { title: "Quotes", subtitle: "Draft estimates", href: "/accounting/quotes", icon: FileText },
       { title: "Expenses", subtitle: "Cost and vendor tracking", href: "/accounting/expenses", icon: Receipt },
       { title: "Payments", subtitle: "Collections and status", href: "/accounting/payments", icon: Radar },
+      { title: "Contributions", subtitle: "Monthly client payments", href: "/accounting/contributions", icon: WalletCards },
       { title: "Customers", subtitle: "Client billing accounts", href: "/accounting/customers", icon: Building2 },
       { title: "Vendors", subtitle: "Supplier spend profiles", href: "/accounting/vendors", icon: Building },
       { title: "Banking", subtitle: "Cash and account balances", href: "/accounting/banking", icon: Landmark },
@@ -105,6 +106,17 @@ export const moduleCards: ModuleCard[] = [
     tint: "bg-indigo-50 text-indigo-600",
     submodules: [
       { title: "Asset register", subtitle: "Inventory and ownership", href: "/assets", icon: Laptop },
+    ],
+  },
+  {
+    title: "Attendance",
+    subtitle: "Clock-in, clock-out, and presence",
+    href: "/attendance",
+    icon: CalendarCheck2,
+    tint: "bg-amber-50 text-amber-700",
+    submodules: [
+      { title: "Clock in / out", subtitle: "Record today’s attendance", href: "/attendance", icon: CalendarCheck2 },
+      { title: "Attendance history", subtitle: "Review time and presence", href: "/attendance", icon: ClipboardList },
     ],
   },
   {

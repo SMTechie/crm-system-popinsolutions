@@ -201,6 +201,13 @@ export class CrmController {
     @Body()
     body: {
       fullName?: string;
+      firstName?: string;
+      surname?: string;
+      initials?: string;
+      employeeNumber?: string;
+      contributions?: string;
+      monthlyContribution?: number;
+      contributionStartDate?: string;
       email?: string;
       phone?: string;
       address?: string;
@@ -209,12 +216,23 @@ export class CrmController {
     },
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
-    if (!body.fullName?.trim()) throw new BadRequestException("Contact name is required.");
+    const firstName = body.firstName?.trim();
+    const surname = body.surname?.trim();
+    if (!firstName || !surname || !body.initials?.trim() || !body.employeeNumber?.trim() || !body.companyId) throw new BadRequestException("Surname, initials, employee number, and company are required.");
+    const company = await this.prisma.company.findFirst({ where: { tenantId: tenant.id, id: body.companyId } });
+    if (!company) throw new BadRequestException("Selected company was not found.");
     const contact = await this.prisma.contact.create({
       data: {
         tenantId: tenant.id,
-        companyId: body.companyId,
-        fullName: body.fullName.trim(),
+        companyId: company.id,
+        fullName: `${firstName} ${surname}`,
+        firstName,
+        surname,
+        initials: body.initials.trim().toUpperCase(),
+        employeeNumber: body.employeeNumber.trim(),
+        contributions: body.contributions?.trim() || null,
+        monthlyContribution: body.monthlyContribution === undefined ? null : new Prisma.Decimal(body.monthlyContribution),
+        contributionStartDate: body.contributionStartDate ? new Date(body.contributionStartDate) : null,
         email: body.email ?? null,
         phone: body.phone ?? null,
         address: body.address ?? null,
@@ -232,6 +250,13 @@ export class CrmController {
     @Body()
     body: {
       fullName?: string;
+      firstName?: string;
+      surname?: string;
+      initials?: string;
+      employeeNumber?: string | null;
+      contributions?: string | null;
+      monthlyContribution?: number | null;
+      contributionStartDate?: string | null;
       email?: string;
       phone?: string;
       address?: string | null;
@@ -246,14 +271,26 @@ export class CrmController {
     if (!existing) {
       return { status: "missing", contactId };
     }
+    const firstName = body.firstName?.trim();
+    const surname = body.surname?.trim();
+    if (!firstName || !surname || !body.initials?.trim() || !body.employeeNumber?.trim() || !body.companyId) throw new BadRequestException("Surname, initials, employee number, and company are required.");
+    const company = await this.prisma.company.findFirst({ where: { tenantId: tenant.id, id: body.companyId } });
+    if (!company) throw new BadRequestException("Selected company was not found.");
     const item = await this.prisma.contact.update({
       where: { id: contactId },
       data: {
-        fullName: body.fullName ?? undefined,
+        fullName: `${firstName} ${surname}`,
+        firstName,
+        surname,
+        initials: body.initials.trim().toUpperCase(),
+        employeeNumber: body.employeeNumber.trim(),
+        contributions: body.contributions === "" ? null : body.contributions?.trim() || undefined,
+        monthlyContribution: body.monthlyContribution === null ? null : body.monthlyContribution === undefined ? undefined : new Prisma.Decimal(body.monthlyContribution),
+        contributionStartDate: body.contributionStartDate === "" ? null : body.contributionStartDate ? new Date(body.contributionStartDate) : undefined,
         email: body.email ?? undefined,
         phone: body.phone ?? undefined,
         address: body.address === "" ? null : body.address ?? undefined,
-        companyId: body.companyId === "" ? null : body.companyId ?? undefined,
+        companyId: company.id,
         tags: body.tags?.length ? body.tags : undefined,
       },
     });

@@ -15,7 +15,7 @@ async function main() {
     create: {
       name: "Pop In Solutions",
       slug: "demo-tenant",
-      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"],
+      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "users", "settings"],
       planCode: "enterprise",
       subscriptionStatus: "active",
       onboardingCompleted: true,
@@ -47,7 +47,7 @@ async function main() {
   await prisma.tenant.update({
     where: { id: tenant.id },
     data: {
-      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"],
+      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "users", "settings"],
       planCode: "enterprise",
       subscriptionStatus: "active",
       onboardingCompleted: true,
@@ -307,27 +307,52 @@ async function main() {
   }
 
   const contacts = [
-    ["Lerato Dlamini", "lerato@atlasfreight.co.za", "+27 11 000 1111", companies[0].id],
-    ["Zinhle Mhlambi", "zinhle@verta.co.za", "+27 11 000 2222", companies[1].id],
-    ["Ernest Molelekwa", "ernest@kibo.co.za", "+27 11 000 3333", companies[2].id],
+    { firstName: "Lerato", surname: "Dlamini", initials: "LD", employeeNumber: "AT-001", email: "lerato@atlasfreight.co.za", phone: "+27 11 000 1111", companyId: companies[0].id, monthlyContribution: 450, contributionStartDate: "2026-08-01", contributions: "Monthly membership contribution" },
+    { firstName: "Zinhle", surname: "Mhlambi", initials: "ZM", employeeNumber: "VG-014", email: "zinhle@verta.co.za", phone: "+27 11 000 2222", companyId: companies[1].id, monthlyContribution: 300, contributionStartDate: "2026-08-01", contributions: "Monthly membership contribution" },
+    { firstName: "Ernest", surname: "Molelekwa", initials: "EM", employeeNumber: "KS-027", email: "ernest@kibo.co.za", phone: "+27 11 000 3333", companyId: companies[2].id, monthlyContribution: 275, contributionStartDate: "2026-08-01", contributions: "Monthly membership contribution" },
   ];
 
-  for (const [fullName, email, phone, companyId] of contacts) {
+  for (const contact of contacts) {
+    const fullName = `${contact.firstName} ${contact.surname}`;
     await prisma.contact.upsert({
       where: {
-        id: `${tenant.id}-${email}`,
+        id: `${tenant.id}-${contact.email}`,
       },
-      update: { fullName, phone, companyId, tags: ["crm", "priority"] },
+      update: { fullName, firstName: contact.firstName, surname: contact.surname, initials: contact.initials, employeeNumber: contact.employeeNumber, phone: contact.phone, companyId: contact.companyId, monthlyContribution: contact.monthlyContribution, contributionStartDate: new Date(contact.contributionStartDate), contributionActive: true, contributions: contact.contributions, tags: ["crm", "priority"] },
       create: {
-        id: `${tenant.id}-${email}`,
+        id: `${tenant.id}-${contact.email}`,
         tenantId: tenant.id,
-        companyId,
+        companyId: contact.companyId,
         fullName,
-        email,
-        phone,
+        firstName: contact.firstName,
+        surname: contact.surname,
+        initials: contact.initials,
+        employeeNumber: contact.employeeNumber,
+        email: contact.email,
+        phone: contact.phone,
+        monthlyContribution: contact.monthlyContribution,
+        contributionStartDate: new Date(contact.contributionStartDate),
+        contributionActive: true,
+        contributions: contact.contributions,
         tags: ["crm", "priority"],
       },
     });
+  }
+
+  const contributionPeriods = [
+    { period: "2026-08", paid: [true, true, false] },
+    { period: "2026-09", paid: [true, false, false] },
+  ];
+  for (const period of contributionPeriods) {
+    for (const [index, contact] of contacts.entries()) {
+      const contactId = `${tenant.id}-${contact.email}`;
+      const isPaid = period.paid[index];
+      await prisma.contributionPayment.upsert({
+        where: { tenantId_contactId_period: { tenantId: tenant.id, contactId, period: period.period } },
+        update: { amountDue: contact.monthlyContribution, amountPaid: isPaid ? contact.monthlyContribution : 0, status: isPaid ? "PAID" : "UNPAID", paidAt: isPaid ? new Date(`${period.period}-05T10:00:00.000Z`) : null, reference: isPaid ? `PAY-${period.period.replace("-", "")}-${String(index + 1).padStart(3, "0")}` : null },
+        create: { tenantId: tenant.id, contactId, period: period.period, amountDue: contact.monthlyContribution, amountPaid: isPaid ? contact.monthlyContribution : 0, status: isPaid ? "PAID" : "UNPAID", paidAt: isPaid ? new Date(`${period.period}-05T10:00:00.000Z`) : null, reference: isPaid ? `PAY-${period.period.replace("-", "")}-${String(index + 1).padStart(3, "0")}` : null },
+      });
+    }
   }
 
   const deals = [
@@ -359,6 +384,7 @@ async function main() {
     ["INV-2026-0001", "Atlas Freight", InvoiceStatus.PAID, 42000, 6300],
     ["INV-2026-0002", "Verta Group", InvoiceStatus.SENT, 86000, 12900],
     ["INV-2026-0003", "Kibo Stores", InvoiceStatus.OVERDUE, 54000, 8100],
+    ["INV-2026-0004", "Atlas Freight", InvoiceStatus.SENT, 24000, 3600],
   ];
 
   for (const [number, customer, status, subtotal, taxAmount] of invoices) {
@@ -383,6 +409,25 @@ async function main() {
         dueAt: new Date("2026-08-21T08:00:00.000Z"),
       },
     });
+  }
+
+  const seededInvoice = await prisma.invoice.findUnique({ where: { tenantId_number: { tenantId: tenant.id, number: "INV-2026-0001" } } });
+  if (seededInvoice) {
+    await prisma.invoiceItem.upsert({ where: { id: `${seededInvoice.id}-services` }, update: { description: "CRM implementation services", quantity: 1, unitPrice: 42000, discount: 0, taxRate: 15, lineTotal: 42000 }, create: { id: `${seededInvoice.id}-services`, invoiceId: seededInvoice.id, description: "CRM implementation services", quantity: 1, unitPrice: 42000, discount: 0, taxRate: 15, lineTotal: 42000 } });
+    await prisma.payment.upsert({ where: { id: `${seededInvoice.id}-payment` }, update: { provider: "Nedbank", method: "BANK_TRANSFER", reference: "POP-PAY-0001", amount: 48300, receivedAt: new Date("2026-08-18T10:00:00.000Z") }, create: { id: `${seededInvoice.id}-payment`, invoiceId: seededInvoice.id, provider: "Nedbank", method: "BANK_TRANSFER", reference: "POP-PAY-0001", amount: 48300, receivedAt: new Date("2026-08-18T10:00:00.000Z") } });
+  }
+  const septemberInvoice = await prisma.invoice.findUnique({ where: { tenantId_number: { tenantId: tenant.id, number: "INV-2026-0004" } } });
+  if (septemberInvoice) {
+    await prisma.invoiceItem.upsert({ where: { id: `${septemberInvoice.id}-support` }, update: { description: "September support retainer", quantity: 1, unitPrice: 24000, discount: 0, taxRate: 15, lineTotal: 24000 }, create: { id: `${septemberInvoice.id}-support`, invoiceId: septemberInvoice.id, description: "September support retainer", quantity: 1, unitPrice: 24000, discount: 0, taxRate: 15, lineTotal: 24000 } });
+    await prisma.payment.upsert({ where: { id: `${septemberInvoice.id}-payment` }, update: { provider: "FNB", method: "CARD", reference: "POP-PAY-0004", amount: 10000, receivedAt: new Date("2026-09-12T10:00:00.000Z") }, create: { id: `${septemberInvoice.id}-payment`, invoiceId: septemberInvoice.id, provider: "FNB", method: "CARD", reference: "POP-PAY-0004", amount: 10000, receivedAt: new Date("2026-09-12T10:00:00.000Z") } });
+  }
+
+  const seededQuote = await prisma.quote.upsert({ where: { tenantId_number: { tenantId: tenant.id, number: "QUO-2026-0001" } }, update: { customer: "Atlas Freight", status: "SENT", currency: "ZAR", subtotal: 52000, taxAmount: 7800, total: 59800, validUntil: new Date("2026-10-15T00:00:00.000Z") }, create: { tenantId: tenant.id, customer: "Atlas Freight", number: "QUO-2026-0001", status: "SENT", currency: "ZAR", subtotal: 52000, taxAmount: 7800, total: 59800, validUntil: new Date("2026-10-15T00:00:00.000Z") } });
+  await prisma.quoteItem.upsert({ where: { id: `${seededQuote.id}-implementation` }, update: { description: "CRM implementation package", quantity: 1, unitPrice: 52000, taxRate: 15, lineTotal: 52000 }, create: { id: `${seededQuote.id}-implementation`, quoteId: seededQuote.id, description: "CRM implementation package", quantity: 1, unitPrice: 52000, taxRate: 15, lineTotal: 52000 } });
+
+  const leratoContact = await prisma.contact.findUnique({ where: { id: `${tenant.id}-lerato@atlasfreight.co.za` } });
+  if (leratoContact) {
+    await prisma.activity.upsert({ where: { id: `${leratoContact.id}-kickoff` }, update: { type: "MEETING", title: "Implementation kickoff", occurredAt: new Date("2026-08-12T09:00:00.000Z"), ownerId: user.id }, create: { id: `${leratoContact.id}-kickoff`, tenantId: tenant.id, contactId: leratoContact.id, ownerId: user.id, type: "MEETING", title: "Implementation kickoff", occurredAt: new Date("2026-08-12T09:00:00.000Z") } });
   }
 
   await prisma.expense.deleteMany({
@@ -753,6 +798,16 @@ async function main() {
     where: { id: `${demoAsset.id}-assignment` },
     update: { returnedAt: null, employeeId: employee.id },
     create: { id: `${demoAsset.id}-assignment`, assetId: demoAsset.id, employeeId: employee.id, notes: "Demo onboarding allocation." },
+  });
+  await prisma.expense.upsert({
+    where: { id: `${tenant.id}-september-software-expense` },
+    update: { category: "Software", vendor: "Microsoft 365", currency: "ZAR", amount: 4200, taxAmount: 630, incurredAt: new Date("2026-09-06T08:00:00.000Z"), status: "APPROVED" },
+    create: { id: `${tenant.id}-september-software-expense`, tenantId: tenant.id, category: "Software", vendor: "Microsoft 365", currency: "ZAR", amount: 4200, taxAmount: 630, incurredAt: new Date("2026-09-06T08:00:00.000Z"), status: "APPROVED" },
+  });
+  await prisma.assetMaintenance.upsert({
+    where: { id: `${demoAsset.id}-maintenance-1` },
+    update: { date: new Date("2026-08-20T08:00:00.000Z"), issue: "Routine service check", description: "Preventive inspection and operating system updates.", provider: "Internal IT", cost: 850, status: "COMPLETED", completedAt: new Date("2026-08-20T16:00:00.000Z") },
+    create: { id: `${demoAsset.id}-maintenance-1`, assetId: demoAsset.id, date: new Date("2026-08-20T08:00:00.000Z"), issue: "Routine service check", description: "Preventive inspection and operating system updates.", provider: "Internal IT", cost: 850, status: "COMPLETED", completedAt: new Date("2026-08-20T16:00:00.000Z") },
   });
   const demoProject = await prisma.project.upsert({
     where: { id: `${tenant.id}-crm-rollout` },

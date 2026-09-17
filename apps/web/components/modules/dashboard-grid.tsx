@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Clock3, MapPin, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { type ModuleCard } from "@/lib/data";
-import { filterModuleCards } from "@/lib/modules";
+import { filterModuleCards, getAccessibleModules } from "@/lib/modules";
 import { getStoredSession } from "@/lib/session";
 import { apiFetch } from "@/lib/api";
 
@@ -14,15 +14,15 @@ type AttendanceToday = { id: string; date: string; status: string; checkInAt?: s
 export function DashboardGrid() {
   const [activeModule, setActiveModule] = useState<ModuleCard | null>(null);
   const [availableModules, setAvailableModules] = useState<ModuleCard[]>([]);
+  const [userName, setUserName] = useState("there");
   const [todayAttendance, setTodayAttendance] = useState<AttendanceToday | null>(null);
   const [attendanceMessage, setAttendanceMessage] = useState("");
   const [attendanceBusy, setAttendanceBusy] = useState(false);
 
   useEffect(() => {
     const session = getStoredSession();
-    setAvailableModules(
-      filterModuleCards(session?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"]),
-    );
+    setUserName(session?.name?.split(" ")[0] || "there");
+    setAvailableModules(filterModuleCards(getAccessibleModules(session?.role, session?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "users", "settings"])));
     void apiFetch<{ items: AttendanceToday[] }>("/attendance/history").then((result) => {
       const today = new Date().toDateString();
       setTodayAttendance(result.items.find((item) => new Date(item.date).toDateString() === today) ?? null);
@@ -70,7 +70,7 @@ export function DashboardGrid() {
     <>
       <Card className="mb-5 border-brand-100 bg-gradient-to-r from-brand-50/70 via-white to-white p-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand-500 text-white"><Clock3 className="h-5 w-5" /></div><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-600">Employee attendance</p><h2 className="mt-1 text-lg font-semibold text-ink">{todayAttendance?.checkInAt && !todayAttendance.checkOutAt ? "You are clocked in" : "Ready to clock in"}</h2><p className="mt-1 text-xs text-slate-500">Time is captured automatically. Location is requested from your device.</p>{attendanceMessage ? <p className="mt-2 text-xs font-semibold text-brand-600">{attendanceMessage}</p> : null}</div></div>
+          <div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand-500 text-white"><Clock3 className="h-5 w-5" /></div><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-600">Employee attendance</p><h2 className="mt-1 text-lg font-semibold text-ink">{todayAttendance?.checkInAt && !todayAttendance.checkOutAt ? `You’re clocked in, ${userName}. Ready to clock out?` : `Good day, ${userName}. Ready to clock in?`}</h2><p className="mt-1 text-xs text-slate-500">Time is captured automatically. Location is requested from your device.</p>{attendanceMessage ? <p className="mt-2 text-xs font-semibold text-brand-600">{attendanceMessage}</p> : null}</div></div>
           <div className="flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5" />{todayAttendance?.location || "Location will be captured"}</span>{todayAttendance?.checkInAt && !todayAttendance.checkOutAt ? <button disabled={attendanceBusy} onClick={() => void attendanceAction("out")} className="rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{attendanceBusy ? "Saving…" : "Clock out"}</button> : <button disabled={attendanceBusy} onClick={() => void attendanceAction("in")} className="rounded-2xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{attendanceBusy ? "Saving…" : "Clock in"}</button>}</div>
         </div>
       </Card>

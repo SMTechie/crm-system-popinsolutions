@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/lib/api";
 import { clearSession, getStoredSession, storeSession, type SessionUser } from "@/lib/session";
-import { isModuleEnabled } from "@/lib/modules";
+import { getAccessibleModules, isModuleEnabled } from "@/lib/modules";
 
 type AuthGuardProps = PropsWithChildren<{
   onResolved?: (user: SessionUser) => void;
@@ -61,7 +61,7 @@ export function AuthGuard({ children, onResolved }: AuthGuardProps) {
 
         storeSession(resolvedSession);
 
-        if (!isModuleEnabled(pathname, resolvedSession.enabledModules)) {
+        if (!isModuleEnabled(pathname, getAccessibleModules(resolvedSession.role, resolvedSession.enabledModules))) {
           router.replace("/dashboard");
           return;
         }
@@ -79,10 +79,13 @@ export function AuthGuard({ children, onResolved }: AuthGuardProps) {
 
   if (status !== "ready") {
     return (
-      <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#edf4ff_0%,#f9fbff_40%,#f5f8ff_100%)]">
-        <div className="rounded-[28px] border border-line bg-white px-8 py-6 shadow-panel">
-          <p className="text-lg font-semibold text-ink">Loading workspace...</p>
-          <p className="mt-2 text-sm text-slate-500">Checking your Pop In session.</p>
+      <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#edf4ff_0%,#f9fbff_40%,#f5f8ff_100%)]" aria-label="Loading workspace" role="status">
+        <div className="rounded-[28px] border border-line bg-white px-10 py-9 shadow-panel">
+          <div id="wifi-loader" aria-hidden="true">
+            <svg className="circle-outer" viewBox="0 0 86 86"><circle className="back" cx="43" cy="43" r="40" /><circle className="front" cx="43" cy="43" r="40" /></svg>
+            <svg className="circle-middle" viewBox="0 0 60 60"><circle className="back" cx="30" cy="30" r="27" /><circle className="front" cx="30" cy="30" r="27" /></svg>
+            <svg className="circle-inner" viewBox="0 0 34 34"><circle className="back" cx="17" cy="17" r="14" /><circle className="front" cx="17" cy="17" r="14" /></svg>
+          </div>
         </div>
       </div>
     );

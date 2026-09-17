@@ -11,14 +11,14 @@ export class PermissionGuard implements CanActivate {
     const permissions: Record<string, string[]> = {
       OWNER: [],
       ADMIN: [],
-      SALES_MANAGER: ["crm.customers.view", "crm.customers.create", "crm.customers.edit", "accounting.invoices.view", "projects.view", "reports.view"],
-      ACCOUNTANT: ["crm.customers.view", "accounting.invoices.view", "accounting.invoices.create", "accounting.invoices.approve", "reports.view"],
+      SALES_MANAGER: ["crm.customers.view", "crm.customers.create", "crm.customers.edit", "accounting.invoices.view", "reports.view"],
+      ACCOUNTANT: ["crm.customers.view", "accounting.invoices.view", "accounting.invoices.create", "accounting.invoices.approve", "hr.employees.view", "attendance.view", "reports.view"],
       HR_MANAGER: ["crm.customers.view", "accounting.invoices.view", "hr.employees.view", "hr.employees.edit", "attendance.view", "attendance.manage", "users.view", "reports.view"],
       PROJECT_MANAGER: ["crm.customers.view", "accounting.invoices.view", "hr.employees.view", "assets.view", "assets.create", "assets.assign", "assets.return", "projects.view", "projects.manage", "reports.view"],
       IT_MANAGER: ["crm.customers.view", "accounting.invoices.view", "hr.employees.view", "attendance.view", "assets.view", "assets.create", "assets.assign", "assets.return", "projects.view", "users.view", "users.manage", "settings.manage", "reports.view"],
-      AGENT: ["crm.customers.view", "crm.customers.create", "crm.customers.edit", "hr.employees.view", "attendance.view", "projects.view"],
+      AGENT: ["crm.customers.view", "crm.customers.create", "crm.customers.edit", "attendance.view"],
       EMPLOYEE: ["attendance.view"],
-      VIEWER: ["crm.customers.view", "accounting.invoices.view", "hr.employees.view", "attendance.view", "assets.view", "projects.view", "users.view", "reports.view"],
+      VIEWER: ["crm.customers.view", "accounting.invoices.view", "hr.employees.view", "attendance.view", "assets.view", "reports.view"],
     };
     return permissions[role ?? ""] ?? [];
   }

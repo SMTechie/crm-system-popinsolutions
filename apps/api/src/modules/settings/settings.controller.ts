@@ -15,7 +15,7 @@ import { randomBytes } from "node:crypto";
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller("settings")
 export class SettingsController {
-  private readonly allowedModules = ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"] as const;
+  private readonly allowedModules = ["crm", "accounting", "hr", "attendance", "assets", "users", "settings"] as const;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -77,23 +77,23 @@ export class SettingsController {
   private roleScope(role: UserRole) {
     switch (role) {
       case "OWNER":
-        return { crm: "Full", accounting: "Full", hr: "Full", attendance: "Full", assets: "Full", projects: "Full", users: "Full", settings: "Full" };
+        return { crm: "Full", accounting: "Full", hr: "Full", attendance: "Full", assets: "Full", users: "Full", settings: "Full" };
       case "ADMIN":
-        return { crm: "Full", accounting: "Edit", hr: "Edit", attendance: "Edit", assets: "Edit", projects: "Edit", users: "Edit", settings: "Edit" };
+        return { crm: "Full", accounting: "Edit", hr: "Edit", attendance: "Edit", assets: "Edit", users: "Edit", settings: "Edit" };
       case "SALES_MANAGER":
-        return { crm: "Full", accounting: "Read", hr: "None", attendance: "None", assets: "None", projects: "Read", users: "None", settings: "None" };
+        return { crm: "Full", accounting: "Read", hr: "None", attendance: "None", assets: "None", users: "None", settings: "None" };
       case "ACCOUNTANT":
-        return { crm: "Read", accounting: "Full", hr: "Read", attendance: "Read", assets: "None", projects: "None", users: "None", settings: "None" };
+        return { crm: "Read", accounting: "Full", hr: "Read", attendance: "Read", assets: "None", users: "None", settings: "None" };
       case "HR_MANAGER":
-        return { crm: "Read", accounting: "Read", hr: "Full", attendance: "Full", assets: "None", projects: "None", users: "Read", settings: "None" };
+        return { crm: "Read", accounting: "Read", hr: "Full", attendance: "Full", assets: "None", users: "Read", settings: "None" };
       case "PROJECT_MANAGER":
-        return { crm: "Read", accounting: "Read", hr: "Read", attendance: "Read", assets: "Edit", projects: "Full", users: "None", settings: "None" };
+        return { crm: "Read", accounting: "Read", hr: "Read", attendance: "Read", assets: "Edit", users: "None", settings: "None" };
       case "IT_MANAGER":
-        return { crm: "Read", accounting: "Read", hr: "Read", attendance: "Read", assets: "Full", projects: "Read", users: "Full", settings: "Full" };
+        return { crm: "Read", accounting: "Read", hr: "Read", attendance: "Read", assets: "Full", users: "Full", settings: "Full" };
       case "AGENT":
-        return { crm: "Edit", accounting: "None", hr: "Self", attendance: "Self", assets: "None", projects: "Read", users: "None", settings: "None" };
+        return { crm: "Edit", accounting: "None", hr: "Self", attendance: "Self", assets: "None", users: "None", settings: "None" };
       default:
-        return { crm: "Read", accounting: "None", hr: "Self", attendance: "Self", assets: "None", projects: "Read", users: "None", settings: "None" };
+        return { crm: "Read", accounting: "None", hr: "Self", attendance: "Self", assets: "None", users: "None", settings: "None" };
     }
   }
 
