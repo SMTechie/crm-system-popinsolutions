@@ -157,14 +157,14 @@ export function DashboardGrid() {
 
 function moduleCardTone(title: string) {
   const tones: Record<string, string> = {
-    CRM: "bg-gradient-to-br from-cyan-50/70 to-white",
-    Accounting: "bg-gradient-to-br from-emerald-50/70 to-white",
-    HR: "bg-gradient-to-br from-rose-50/70 to-white",
-    Attendance: "bg-gradient-to-br from-amber-50/70 to-white",
-    Assets: "bg-gradient-to-br from-indigo-50/70 to-white",
-    Projects: "bg-gradient-to-br from-violet-50/70 to-white",
-    Users: "bg-gradient-to-br from-sky-50/70 to-white",
-    Settings: "bg-gradient-to-br from-slate-50 to-white",
+    CRM: "bg-gradient-to-br from-cyan-100/90 via-cyan-50/70 to-sky-50/60",
+    Accounting: "bg-gradient-to-br from-emerald-100/90 via-emerald-50/70 to-teal-50/60",
+    HR: "bg-gradient-to-br from-rose-100/90 via-rose-50/70 to-pink-50/60",
+    Attendance: "bg-gradient-to-br from-amber-100/90 via-amber-50/70 to-orange-50/60",
+    Assets: "bg-gradient-to-br from-indigo-100/90 via-indigo-50/70 to-blue-50/60",
+    Projects: "bg-gradient-to-br from-violet-100/90 via-violet-50/70 to-purple-50/60",
+    Users: "bg-gradient-to-br from-sky-100/90 via-sky-50/70 to-blue-50/60",
+    Settings: "bg-gradient-to-br from-slate-100/90 via-slate-50/70 to-gray-50/60",
   };
   return tones[title] ?? "bg-white";
 }

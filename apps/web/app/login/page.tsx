@@ -31,11 +31,12 @@ export default function LoginPage() {
   const router = useRouter();
   const [nextRoute, setNextRoute] = useState("/dashboard");
   const [workspaceSlug, setWorkspaceSlug] = useState("demo-tenant");
-  const [branding, setBranding] = useState({ name: "Pop In Solutions", logoUrl: "" });
+  const [branding, setBranding] = useState({ name: "Pop In Solutions", logoUrl: "", allowLocalAuth: true, oauthProviders: [] as Array<{ provider: "google" | "microsoft"; name: string; configured: boolean }> });
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<"google" | "microsoft" | null>(null);
   const [showSignup, setShowSignup] = useState(false);
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupError, setSignupError] = useState("");
@@ -148,8 +149,8 @@ export default function LoginPage() {
     void fetch(`${API_BASE_URL}/auth/workspace-branding`, { headers: { "X-Workspace-Slug": workspace } })
       .then(async (response) => {
         if (!response.ok) return;
-        const result = (await response.json()) as { name?: string; logoUrl?: string | null };
-        setBranding({ name: result.name || "Pop In Solutions", logoUrl: result.logoUrl || "" });
+        const result = (await response.json()) as { name?: string; logoUrl?: string | null; allowLocalAuth?: boolean; oauthProviders?: Array<{ provider: "google" | "microsoft"; name: string; configured: boolean }> };
+        setBranding({ name: result.name || "Pop In Solutions", logoUrl: result.logoUrl || "", allowLocalAuth: result.allowLocalAuth ?? true, oauthProviders: result.oauthProviders ?? [] });
       })
       .catch(() => undefined);
 
@@ -248,6 +249,20 @@ export default function LoginPage() {
     await submitLogin(username, password, workspaceSlug);
   }
 
+  async function startOAuth(provider: "google" | "microsoft") {
+    try {
+      setOauthLoading(provider);
+      setError("");
+      const response = await fetch(`${API_BASE_URL}/auth/oauth/${provider}`, { headers: { "X-Workspace-Slug": workspaceSlug.trim() } });
+      const result = await response.json() as { url?: string; message?: string };
+      if (!response.ok || !result.url) throw new Error(result.message || `${provider} sign-in is not available.`);
+      window.location.href = result.url;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "OAuth sign-in failed.");
+      setOauthLoading(null);
+    }
+  }
+
   async function handleSignup(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -309,7 +324,7 @@ export default function LoginPage() {
             <Clock3 className="h-4 w-4" /> Employee clock in / out
           </button>
 
-          <form onSubmit={handleEmailLogin} className="mx-auto mt-6 max-w-[500px] space-y-3 md:mt-7">
+          {branding.allowLocalAuth ? <form onSubmit={handleEmailLogin} className="mx-auto mt-6 max-w-[500px] space-y-3 md:mt-7">
             <label className="block text-left">
               <span className="mb-1.5 block px-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Username</span>
               <input
@@ -345,7 +360,19 @@ export default function LoginPage() {
                 Sign in securely with your workspace credentials.
               </p>
             </div>
-          </form>
+          </form> : <p className="mx-auto mt-6 max-w-[500px] rounded-2xl bg-amber-50 px-4 py-3 text-center text-sm text-amber-800">Password sign-in is disabled for this workspace. Use a provider below.</p>}
+
+          <div className="mx-auto mt-5 max-w-[500px]">
+            <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400"><span className="h-px flex-1 bg-line" />or continue with<span className="h-px flex-1 bg-line" /></div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {(["google", "microsoft"] as const).map((providerKey) => {
+                const provider = branding.oauthProviders.find((item) => item.provider === providerKey);
+                const name = providerKey === "google" ? "Google" : "Microsoft";
+                return <button key={providerKey} type="button" disabled={oauthLoading !== null || !provider?.configured} onClick={() => void startOAuth(providerKey)} className="rounded-2xl border border-line px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-soft disabled:cursor-not-allowed disabled:opacity-50">{oauthLoading === providerKey ? "Redirecting..." : provider?.configured ? `Continue with ${name}` : `${name} unavailable`}</button>;
+              })}
+            </div>
+            {!branding.oauthProviders.some((provider) => provider.configured) ? <p className="mt-2 text-center text-xs text-slate-500">OAuth sign-in is not configured for this workspace yet.</p> : null}
+          </div>
         </div>
         <p className="mt-5 text-center text-sm font-medium text-slate-500 md:mt-6 md:text-lg">
           Powered by <span className="text-ink">Pop In Solutions</span>

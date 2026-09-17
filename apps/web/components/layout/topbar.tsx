@@ -29,6 +29,7 @@ type NotificationItem = {
 };
 
 const THEME_KEY = "popin-theme";
+const DISMISSED_NOTIFICATIONS_KEY = "popin-dismissed-notifications";
 
 export function Topbar({ user, pageTitle }: TopbarProps) {
   const pathname = usePathname();
@@ -158,8 +159,12 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
 
         await Promise.all(requests);
 
-        setNotifications(items);
-        setNotificationStatus(items.length ? "" : "No urgent workspace items right now.");
+        const dismissed = new Set<string>(
+          JSON.parse(window.localStorage.getItem(DISMISSED_NOTIFICATIONS_KEY) ?? "[]") as string[],
+        );
+        const visibleItems = items.filter((item) => !dismissed.has(item.id));
+        setNotifications(visibleItems);
+        setNotificationStatus(visibleItems.length ? "" : "No urgent workspace items right now.");
       } catch (error) {
         setNotifications([]);
         setNotificationStatus(error instanceof Error ? error.message : "Failed to load notifications.");
@@ -168,6 +173,16 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
 
     void loadNotifications();
   }, [user?.enabledModules, user?.role, user?.token]);
+
+  function clearNotifications() {
+    const dismissed = new Set<string>(
+      JSON.parse(window.localStorage.getItem(DISMISSED_NOTIFICATIONS_KEY) ?? "[]") as string[],
+    );
+    notifications.forEach((item) => dismissed.add(item.id));
+    window.localStorage.setItem(DISMISSED_NOTIFICATIONS_KEY, JSON.stringify([...dismissed]));
+    setNotifications([]);
+    setNotificationStatus("No urgent workspace items right now.");
+  }
 
   function toggleTheme() {
     const nextTheme = theme === "light" ? "dark" : "light";
@@ -220,8 +235,19 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
                 </span>
               </button>
               {notificationsOpen ? (
-                <div className="theme-surface absolute right-0 top-[calc(100%+10px)] w-[320px] rounded-[24px] border border-line bg-white p-3 shadow-panel">
-                  <p className="theme-text px-2 pb-2 text-sm font-semibold text-ink">Workspace Alerts</p>
+                <div className="theme-surface absolute left-1/2 top-[calc(100%+10px)] z-30 w-[min(320px,calc(100vw-2rem))] -translate-x-1/2 rounded-[24px] border border-line bg-white p-3 shadow-panel sm:left-auto sm:right-0 sm:translate-x-0">
+                  <div className="flex items-center justify-between gap-3 px-2 pb-2">
+                    <p className="theme-text text-sm font-semibold text-ink">Workspace Alerts</p>
+                    {notifications.length ? (
+                      <button
+                        type="button"
+                        onClick={clearNotifications}
+                        className="theme-subtext text-xs font-semibold text-slate-500 transition hover:text-brand-500"
+                      >
+                        Clear all
+                      </button>
+                    ) : null}
+                  </div>
                   {notifications.length ? (
                     <div className="space-y-2">
                       {notifications.map((item) => (

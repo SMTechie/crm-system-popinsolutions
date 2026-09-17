@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
-import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { EmailService } from "../../common/services/email.service";
 
@@ -61,6 +61,30 @@ export class AuthService {
 
   private hashToken(token: string) { return createHash("sha256").update(token).digest("hex"); }
 
+  private integrationKey() { return createHash("sha256").update(this.getSecret()).digest(); }
+
+  private decryptOAuthConfig(value: string) {
+    const [iv, tag, encrypted] = value.split(".");
+    if (!iv || !tag || !encrypted) return {};
+    try {
+      const decipher = createDecipheriv("aes-256-gcm", this.integrationKey(), Buffer.from(iv, "base64url"));
+      decipher.setAuthTag(Buffer.from(tag, "base64url"));
+      return JSON.parse(Buffer.concat([decipher.update(Buffer.from(encrypted, "base64url")), decipher.final()]).toString("utf8")) as { clientId?: string; clientSecret?: string };
+    } catch { return {}; }
+  }
+
+  private async oauthCredentials(provider: "google" | "microsoft", tenantSlug?: string) {
+    const envClientId = provider === "google" ? process.env.GOOGLE_CLIENT_ID : process.env.MICROSOFT_CLIENT_ID;
+    const envClientSecret = provider === "google" ? process.env.GOOGLE_CLIENT_SECRET : process.env.MICROSOFT_CLIENT_SECRET;
+    if (envClientId && envClientSecret) return { clientId: envClientId, clientSecret: envClientSecret };
+    if (!tenantSlug) return { clientId: "", clientSecret: "" };
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug: this.slugify(tenantSlug) }, select: { id: true } });
+    if (!tenant) return { clientId: "", clientSecret: "" };
+    const connection = await this.prisma.integrationConnection.findUnique({ where: { tenantId_provider: { tenantId: tenant.id, provider: `oauth_${provider}` } } });
+    if (!connection?.enabled || !connection.encryptedConfig) return { clientId: "", clientSecret: "" };
+    return this.decryptOAuthConfig(connection.encryptedConfig);
+  }
+
   private oauthState(provider: "google" | "microsoft", tenantSlug?: string) {
     const payload = Buffer.from(JSON.stringify({ provider, tenantSlug: tenantSlug?.trim() || "", nonce: randomBytes(18).toString("base64url"), exp: Date.now() + 10 * 60 * 1000 })).toString("base64url");
     const signature = createHmac("sha256", this.getSecret()).update(payload).digest("base64url");
@@ -81,7 +105,7 @@ export class AuthService {
   }
 
   async oauthAuthorization(provider: "google" | "microsoft", tenantSlug?: string) {
-    const clientId = provider === "google" ? process.env.GOOGLE_CLIENT_ID : process.env.MICROSOFT_CLIENT_ID;
+    const { clientId } = await this.oauthCredentials(provider, tenantSlug);
     if (!clientId) throw new BadRequestException(`${provider} OAuth is not configured.`);
     const redirectUri = `${process.env.APP_BASE_URL || "http://localhost:4000"}/api/v1/auth/oauth/${provider}/callback`;
     const state = this.oauthState(provider, tenantSlug);
@@ -93,8 +117,7 @@ export class AuthService {
   async oauthCallback(provider: "google" | "microsoft", code: string, state: string) {
     if (!code || !state) throw new BadRequestException("OAuth code and state are required.");
     const stateData = this.readOAuthState(state, provider);
-    const clientId = provider === "google" ? process.env.GOOGLE_CLIENT_ID : process.env.MICROSOFT_CLIENT_ID;
-    const clientSecret = provider === "google" ? process.env.GOOGLE_CLIENT_SECRET : process.env.MICROSOFT_CLIENT_SECRET;
+    const { clientId, clientSecret } = await this.oauthCredentials(provider, stateData.tenantSlug);
     if (!clientId || !clientSecret) throw new BadRequestException(`${provider} OAuth is not configured.`);
     const redirectUri = `${process.env.APP_BASE_URL || "http://localhost:4000"}/api/v1/auth/oauth/${provider}/callback`;
     const tokenUrl = provider === "google" ? "https://oauth2.googleapis.com/token" : "https://login.microsoftonline.com/common/oauth2/v2.0/token";
@@ -208,6 +231,10 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials.");
     }
 
+    if (!user.tenant.allowLocalAuth) {
+      throw new UnauthorizedException("Password sign-in is disabled for this workspace. Use a configured OAuth provider.");
+    }
+
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
     return this.issueTokens(user);
@@ -251,12 +278,19 @@ export class AuthService {
     const normalizedSlug = this.slugify(slug || "demo-tenant");
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: normalizedSlug },
-      select: { name: true, logoUrl: true },
+      select: { name: true, logoUrl: true, allowLocalAuth: true },
     });
+    const google = await this.oauthCredentials("google", normalizedSlug);
+    const microsoft = await this.oauthCredentials("microsoft", normalizedSlug);
 
     return {
       name: tenant?.name || "Pop In Solutions",
       logoUrl: tenant?.logoUrl || null,
+      allowLocalAuth: tenant?.allowLocalAuth ?? true,
+      oauthProviders: [
+        { provider: "google", name: "Google", configured: Boolean(google.clientId && google.clientSecret) },
+        { provider: "microsoft", name: "Microsoft", configured: Boolean(microsoft.clientId && microsoft.clientSecret) },
+      ],
     };
   }
 

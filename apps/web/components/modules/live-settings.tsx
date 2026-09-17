@@ -138,7 +138,8 @@ type SettingsPayload = {
   };
   security: {
     sessionMode: string;
-    oauthProviders: string[];
+    oauthProviders: Array<{ name: string; key: string; configured: boolean }>;
+    oauthRedirectUri: string;
     passwordPolicy: string;
     requireMfa: boolean;
     allowLocalAuth: boolean;
@@ -150,10 +151,9 @@ type SettingsPayload = {
 
 type ToastState = { type: "success" | "error"; message: string } | null;
 
-type StripeBillingConfig = {
-  configured: boolean;
-  publishableKey: string | null;
-  plans: Array<{ code: string; priceId: string | null }>;
+type PaymentBillingConfig = {
+  providers: Array<{ provider: "yoco" | "ikhokha"; name: string; configured: boolean }>;
+  plans: Array<{ code: string; amountCents: number }>;
 };
 
 const emptyMember = { id: "", email: "", fullName: "", role: "EMPLOYEE", password: "" };
@@ -755,8 +755,12 @@ export function LiveWorkspaceSettingsPage() {
 
 export function LiveBillingSettingsPage() {
   const { data, setData, toast, notify } = useSettingsData();
-  const [stripeConfig, setStripeConfig] = useState<StripeBillingConfig | null>(null);
-  const [stripeLoading, setStripeLoading] = useState(false);
+  const [paymentConfig, setPaymentConfig] = useState<PaymentBillingConfig | null>(null);
+  const [paymentLoading, setPaymentLoading] = useState<"yoco" | "ikhokha" | null>(null);
+  const [savingBilling, setSavingBilling] = useState(false);
+  const [selectedPaymentProvider, setSelectedPaymentProvider] = useState<"yoco" | "ikhokha" | null>(null);
+  const [savingPaymentProvider, setSavingPaymentProvider] = useState(false);
+  const [paymentProviderForm, setPaymentProviderForm] = useState({ secretKey: "", publicKey: "", appId: "", appSecret: "", entityId: "", starterCents: "", growthCents: "", enterpriseCents: "" });
   const [form, setForm] = useState({
     planCode: "enterprise",
     subscriptionStatus: "active",
@@ -781,97 +785,66 @@ export function LiveBillingSettingsPage() {
   }, [data]);
 
   useEffect(() => {
-    async function loadStripeConfig() {
+    async function loadPaymentConfig() {
       try {
-        const result = await apiFetch<StripeBillingConfig>("/billing/stripe/config");
-        setStripeConfig(result);
+        const result = await apiFetch<PaymentBillingConfig>("/billing/config");
+        setPaymentConfig(result);
       } catch {
-        setStripeConfig({
-          configured: false,
-          publishableKey: null,
-          plans: [],
-        });
+        setPaymentConfig({ providers: [], plans: [] });
       }
     }
 
-    void loadStripeConfig();
+    void loadPaymentConfig();
   }, []);
 
-  async function openStripeCheckout() {
+  async function openPaymentCheckout(provider: "yoco" | "ikhokha") {
     try {
-      setStripeLoading(true);
-      const result = await apiFetch<{ url?: string | null }>("/billing/stripe/checkout-session", {
+      setPaymentLoading(provider);
+      const result = await apiFetch<{ url?: string | null }>(`/billing/${provider}/checkout`, {
         method: "POST",
         body: JSON.stringify({ planCode: form.planCode }),
       });
       if (!result.url) {
-        throw new Error("Stripe checkout URL was not returned.");
+        throw new Error(`${provider} checkout URL was not returned.`);
       }
       window.location.href = result.url;
     } catch (error) {
-      notify("error", error instanceof Error ? error.message : "Failed to start Stripe checkout.");
+      notify("error", error instanceof Error ? error.message : `Failed to start ${provider} checkout.`);
     } finally {
-      setStripeLoading(false);
+      setPaymentLoading(null);
     }
   }
 
-  async function openBillingPortal() {
+  async function savePaymentProvider() {
+    if (!selectedPaymentProvider) return;
     try {
-      setStripeLoading(true);
-      const result = await apiFetch<{ url?: string | null }>("/billing/stripe/portal-session", {
-        method: "POST",
-      });
-      if (!result.url) {
-        throw new Error("Stripe billing portal URL was not returned.");
-      }
-      window.location.href = result.url;
-    } catch (error) {
-      notify("error", error instanceof Error ? error.message : "Failed to open the Stripe billing portal.");
-    } finally {
-      setStripeLoading(false);
-    }
-  }
-
-  async function syncStripe() {
-    try {
-      setStripeLoading(true);
-      const result = await apiFetch<{ status: string; tenant: SettingsPayload["tenant"] }>("/billing/stripe/sync", {
-        method: "POST",
-      });
-      const syncedTenant = result.tenant;
-      setData((current) =>
-        current
-          ? {
-              ...current,
-              tenant: syncedTenant,
-              subscription: {
-                ...current.subscription,
-                planCode: syncedTenant.planCode,
-                subscriptionStatus: syncedTenant.subscriptionStatus,
-                trialEndsAt: syncedTenant.trialEndsAt,
-                subscriptionRenewsAt: syncedTenant.subscriptionRenewsAt,
-                billingEmail: syncedTenant.billingEmail,
-                moduleCount: syncedTenant.enabledModules.length,
-              },
-              usage: {
-                ...current.usage,
-                users: { ...current.usage.users, limit: syncedTenant.maxUsers },
-                storage: { ...current.usage.storage, limitBytes: syncedTenant.maxStorageGb * 1024 * 1024 * 1024 },
-              },
-            }
-          : current,
-      );
-      updateStoredTenant(syncedTenant);
-      notify("success", "Stripe subscription state synced successfully.");
-    } catch (error) {
-      notify("error", error instanceof Error ? error.message : "Failed to sync Stripe subscription data.");
-    } finally {
-      setStripeLoading(false);
-    }
+      setSavingPaymentProvider(true);
+      await apiFetch(`/settings/payment/${selectedPaymentProvider}`, { method: "POST", body: JSON.stringify(paymentProviderForm) });
+      const result = await apiFetch<PaymentBillingConfig>("/billing/config");
+      setPaymentConfig(result);
+      setPaymentProviderForm({ secretKey: "", publicKey: "", appId: "", appSecret: "", entityId: "", starterCents: "", growthCents: "", enterpriseCents: "" });
+      notify("success", `${selectedPaymentProvider === "yoco" ? "Yoco" : "iKhokha"} is configured and ready to test.`);
+    } catch (error) { notify("error", error instanceof Error ? error.message : "Failed to configure payment provider."); }
+    finally { setSavingPaymentProvider(false); }
   }
 
   async function saveBilling() {
+    const maxUsers = Number(form.maxUsers);
+    const maxStorageGb = Number(form.maxStorageGb);
+    if (!Number.isInteger(maxUsers) || maxUsers < 1 || maxUsers > 100000) {
+      notify("error", "Maximum users must be a whole number between 1 and 100,000.");
+      return;
+    }
+    if (!Number.isInteger(maxStorageGb) || maxStorageGb < 1 || maxStorageGb > 100000) {
+      notify("error", "Storage limit must be a whole number between 1 and 100,000 GB.");
+      return;
+    }
+    if (form.billingEmail && !/^\S+@\S+\.\S+$/.test(form.billingEmail.trim())) {
+      notify("error", "Enter a valid billing email address.");
+      return;
+    }
     try {
+      setSavingBilling(true);
       const result = await apiFetch<{ tenant: SettingsPayload["tenant"] }>("/settings", {
         method: "PATCH",
         body: JSON.stringify({
@@ -880,8 +853,8 @@ export function LiveBillingSettingsPage() {
           billingEmail: form.billingEmail,
           trialEndsAt: form.trialEndsAt || null,
           subscriptionRenewsAt: form.subscriptionRenewsAt || null,
-          maxUsers: Number(form.maxUsers) || 1,
-          maxStorageGb: Number(form.maxStorageGb) || 1,
+          maxUsers,
+          maxStorageGb,
         }),
       });
       setData((current) =>
@@ -910,6 +883,8 @@ export function LiveBillingSettingsPage() {
       notify("success", "Subscription settings saved successfully.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Failed to save subscription settings.");
+    } finally {
+      setSavingBilling(false);
     }
   }
 
@@ -921,61 +896,45 @@ export function LiveBillingSettingsPage() {
       <Card className="p-6">
         <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-3">
-            <div className={`rounded-[24px] border p-4 ${stripeConfig?.configured ? "border-emerald-200 bg-emerald-50/50" : "border-amber-200 bg-amber-50/50"}`}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Stripe commerce</p>
-              <p className="mt-2 text-sm font-semibold text-ink">{stripeConfig?.configured ? "Stripe is connected for hosted checkout and portal billing." : "Stripe is not configured yet in the API environment."}</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {stripeConfig?.configured
-                  ? "Tenant admins can move from trial to paid plans using Stripe-hosted billing flows."
-                  : "Set STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET, and all monthly price IDs to activate billing."}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  onClick={() => void openStripeCheckout()}
-                  disabled={!stripeConfig?.configured || stripeLoading}
-                  className="rounded-2xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {stripeLoading ? "Working..." : "Upgrade With Stripe"}
-                </button>
-                <button
-                  onClick={() => void openBillingPortal()}
-                  disabled={!stripeConfig?.configured || stripeLoading}
-                  className="rounded-2xl border border-line px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-soft disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Open Billing Portal
-                </button>
-                <button
-                  onClick={() => void syncStripe()}
-                  disabled={!stripeConfig?.configured || stripeLoading}
-                  className="rounded-2xl border border-line px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-soft disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Sync Stripe Status
-                </button>
+            <div className="rounded-[24px] border border-line bg-soft/30 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Payment gateways</p>
+              <p className="mt-2 text-sm font-semibold text-ink">Choose a South African payment provider for hosted checkout.</p>
+              <p className="mt-1 text-xs text-slate-500">Monthly plan amounts are configured in cents on the API server. The checkout button stays disabled until the provider and plan amounts are ready.</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {(["yoco", "ikhokha"] as const).map((provider) => {
+                  const config = paymentConfig?.providers.find((item) => item.provider === provider);
+                  const ready = Boolean(config?.configured && paymentConfig?.plans.every((plan) => plan.amountCents >= 100));
+                  const name = provider === "yoco" ? "Yoco" : "iKhokha";
+                  return (
+                    <div key={provider} className={`rounded-2xl border p-3 ${selectedPaymentProvider === provider ? "border-brand-400 ring-2 ring-brand-100" : ""} ${ready ? "border-emerald-200 bg-emerald-50/50" : "border-amber-200 bg-amber-50/50"}`}>
+                      <button type="button" onClick={() => setSelectedPaymentProvider(provider)} className="w-full text-left"><div className="flex items-center justify-between gap-2"><span className="text-sm font-semibold text-ink">{name}</span><span className={`text-[11px] font-semibold ${ready ? "text-emerald-700" : "text-amber-700"}`}>{ready ? "Ready" : "Setup required"}</span></div></button>
+                      <p className="mt-1 text-xs text-slate-500">{provider === "yoco" ? "Hosted Yoco Checkout" : "iK Pay payment links"}</p>
+                      <button onClick={() => void openPaymentCheckout(provider)} disabled={!ready || paymentLoading !== null} className="mt-3 w-full rounded-xl bg-brand-500 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{paymentLoading === provider ? "Opening..." : `Pay with ${name}`}</button>
+                    </div>
+                  );
+                })}
               </div>
+              {selectedPaymentProvider ? <div className="mt-3 rounded-2xl border border-brand-100 bg-white p-4">
+                <div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold text-ink">Set up {selectedPaymentProvider === "yoco" ? "Yoco" : "iKhokha"}</p><button type="button" onClick={() => setSelectedPaymentProvider(null)} className="text-xs font-semibold text-slate-500 hover:text-brand-500">Close</button></div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {selectedPaymentProvider === "yoco" ? <><label className="grid gap-1 text-xs font-semibold text-slate-500">Yoco secret key<Input type="password" autoComplete="new-password" value={paymentProviderForm.secretKey} onChange={(event) => setPaymentProviderForm((current) => ({ ...current, secretKey: event.target.value }))} placeholder="sk_live_..." /></label><label className="grid gap-1 text-xs font-semibold text-slate-500">Yoco public key (optional)<Input value={paymentProviderForm.publicKey} onChange={(event) => setPaymentProviderForm((current) => ({ ...current, publicKey: event.target.value }))} placeholder="pk_live_..." /></label></> : <><label className="grid gap-1 text-xs font-semibold text-slate-500">iKhokha App ID<Input value={paymentProviderForm.appId} onChange={(event) => setPaymentProviderForm((current) => ({ ...current, appId: event.target.value }))} /></label><label className="grid gap-1 text-xs font-semibold text-slate-500">iKhokha App Secret<Input type="password" autoComplete="new-password" value={paymentProviderForm.appSecret} onChange={(event) => setPaymentProviderForm((current) => ({ ...current, appSecret: event.target.value }))} /></label><label className="grid gap-1 text-xs font-semibold text-slate-500">Entity ID (optional)<Input value={paymentProviderForm.entityId} onChange={(event) => setPaymentProviderForm((current) => ({ ...current, entityId: event.target.value }))} /></label></>}
+                  <label className="grid gap-1 text-xs font-semibold text-slate-500">Starter monthly price (cents)<Input type="number" min={100} value={paymentProviderForm.starterCents} onChange={(event) => setPaymentProviderForm((current) => ({ ...current, starterCents: event.target.value }))} placeholder="e.g. 9900" /></label><label className="grid gap-1 text-xs font-semibold text-slate-500">Growth monthly price (cents)<Input type="number" min={100} value={paymentProviderForm.growthCents} onChange={(event) => setPaymentProviderForm((current) => ({ ...current, growthCents: event.target.value }))} placeholder="e.g. 19900" /></label><label className="grid gap-1 text-xs font-semibold text-slate-500">Enterprise monthly price (cents)<Input type="number" min={100} value={paymentProviderForm.enterpriseCents} onChange={(event) => setPaymentProviderForm((current) => ({ ...current, enterpriseCents: event.target.value }))} placeholder="e.g. 39900" /></label>
+                </div>
+                <button type="button" onClick={() => void savePaymentProvider()} disabled={savingPaymentProvider} className="mt-3 rounded-xl bg-brand-500 px-4 py-2.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{savingPaymentProvider ? "Saving..." : `Save ${selectedPaymentProvider === "yoco" ? "Yoco" : "iKhokha"} configuration`}</button>
+              </div> : null}
+              <p className="mt-3 text-xs text-slate-500">Set <code>YOCO_SECRET_KEY</code> or <code>IKHOKHA_APP_ID</code> + <code>IKHOKHA_APP_SECRET</code>, plus the three <code>PAYMENT_PRICE_*_MONTHLY_CENTS</code> values, in <code>apps/api/.env</code>.</p>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <Select value={form.planCode} onChange={(event) => setForm((current) => ({ ...current, planCode: event.target.value }))}>
-                {planOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-              <Select value={form.subscriptionStatus} onChange={(event) => setForm((current) => ({ ...current, subscriptionStatus: event.target.value }))}>
-                {subscriptionStatuses.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </Select>
-              <Input value={form.billingEmail} onChange={(event) => setForm((current) => ({ ...current, billingEmail: event.target.value }))} placeholder="Billing email" />
-              <Input type="date" value={form.trialEndsAt} onChange={(event) => setForm((current) => ({ ...current, trialEndsAt: event.target.value }))} />
-              <Input type="date" value={form.subscriptionRenewsAt} onChange={(event) => setForm((current) => ({ ...current, subscriptionRenewsAt: event.target.value }))} />
-              <Input value={form.maxUsers} onChange={(event) => setForm((current) => ({ ...current, maxUsers: event.target.value }))} placeholder="Max users" />
-              <Input value={form.maxStorageGb} onChange={(event) => setForm((current) => ({ ...current, maxStorageGb: event.target.value }))} placeholder="Max storage GB" />
+              <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="billing-plan">Subscription plan<Select id="billing-plan" value={form.planCode} onChange={(event) => setForm((current) => ({ ...current, planCode: event.target.value }))}>{planOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="billing-status">Subscription status<Select id="billing-status" value={form.subscriptionStatus} onChange={(event) => setForm((current) => ({ ...current, subscriptionStatus: event.target.value }))}>{subscriptionStatuses.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}</Select></label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="billing-email">Billing email<Input id="billing-email" type="email" value={form.billingEmail} onChange={(event) => setForm((current) => ({ ...current, billingEmail: event.target.value }))} placeholder="billing@example.com" /></label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="trial-end">Trial end date<Input id="trial-end" type="date" value={form.trialEndsAt} onChange={(event) => setForm((current) => ({ ...current, trialEndsAt: event.target.value }))} /></label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="renewal-date">Next renewal date<Input id="renewal-date" type="date" value={form.subscriptionRenewsAt} onChange={(event) => setForm((current) => ({ ...current, subscriptionRenewsAt: event.target.value }))} /></label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="max-users">Maximum users<Input id="max-users" type="number" min={1} max={100000} step={1} value={form.maxUsers} onChange={(event) => setForm((current) => ({ ...current, maxUsers: event.target.value }))} /></label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="max-storage">Storage limit (GB)<Input id="max-storage" type="number" min={1} max={100000} step={1} value={form.maxStorageGb} onChange={(event) => setForm((current) => ({ ...current, maxStorageGb: event.target.value }))} /></label>
             </div>
-            <button onClick={() => void saveBilling()} className="rounded-2xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white">
-              Save Subscription
+            <button disabled={!data || savingBilling} onClick={() => void saveBilling()} className="rounded-2xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50">
+              {savingBilling ? "Saving..." : "Save Subscription"}
             </button>
           </div>
           <div className="space-y-3">
@@ -1172,28 +1131,40 @@ export function LiveTeamSettingsPage() {
 }
 
 export function LiveSecuritySettingsPage() {
-  const { data, setData, toast, notify } = useSettingsData();
+  const { data, setData, toast, notify, reload } = useSettingsData();
   const [requireMfa, setRequireMfa] = useState(false);
   const [allowLocalAuth, setAllowLocalAuth] = useState(true);
   const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState("480");
   const [themeMode, setThemeMode] = useState("light");
+  const [sessionMode, setSessionMode] = useState<"password" | "oauth" | "hybrid">("password");
+  const [saving, setSaving] = useState(false);
+  const [providerForm, setProviderForm] = useState({ googleClientId: "", googleClientSecret: "", microsoftClientId: "", microsoftClientSecret: "" });
+  const [savingProvider, setSavingProvider] = useState<"google" | "microsoft" | null>(null);
 
   useEffect(() => {
     if (!data) return;
     setRequireMfa(data.security.requireMfa);
     setAllowLocalAuth(data.security.allowLocalAuth);
+    setSessionMode(data.security.allowLocalAuth ? "password" : "oauth");
     setSessionTimeoutMinutes(String(data.security.sessionTimeoutMinutes));
     setThemeMode(data.tenant.themeMode);
   }, [data]);
 
   async function saveSecurity() {
+    const timeout = Number(sessionTimeoutMinutes);
+    if (!Number.isInteger(timeout) || timeout < 5 || timeout > 10080) {
+      notify("error", "Session timeout must be a whole number between 5 and 10,080 minutes.");
+      return;
+    }
+
     try {
+      setSaving(true);
       const result = await apiFetch<{ tenant: SettingsPayload["tenant"] }>("/settings", {
         method: "PATCH",
         body: JSON.stringify({
           requireMfa,
-          allowLocalAuth,
-          sessionTimeoutMinutes: Number(sessionTimeoutMinutes) || 480,
+          allowLocalAuth: sessionMode !== "oauth",
+          sessionTimeoutMinutes: timeout,
           themeMode,
         }),
       });
@@ -1207,16 +1178,34 @@ export function LiveSecuritySettingsPage() {
                 requireMfa: result.tenant.requireMfa,
                 allowLocalAuth: result.tenant.allowLocalAuth,
                 sessionTimeoutMinutes: result.tenant.sessionTimeoutMinutes,
-                sessionMode: result.tenant.allowLocalAuth ? "Local auth + bearer token" : "OAuth-first bearer token",
+                sessionMode: result.tenant.allowLocalAuth ? "Password + OAuth bearer token" : "OAuth-only bearer token",
               },
             }
           : current,
       );
       updateStoredTenant(result.tenant);
+      document.documentElement.dataset.theme = result.tenant.themeMode === "dark" ? "dark" : "light";
+      window.localStorage.setItem("popin-theme", result.tenant.themeMode);
       notify("success", "Security settings saved successfully.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Failed to save security settings.");
+    } finally {
+      setSaving(false);
     }
+  }
+
+  async function saveOAuthProvider(provider: "google" | "microsoft") {
+    const clientId = provider === "google" ? providerForm.googleClientId : providerForm.microsoftClientId;
+    const clientSecret = provider === "google" ? providerForm.googleClientSecret : providerForm.microsoftClientSecret;
+    if (!clientId.trim() || !clientSecret.trim()) { notify("error", `Enter the ${provider === "google" ? "Google" : "Microsoft"} client ID and client secret.`); return; }
+    try {
+      setSavingProvider(provider);
+      await apiFetch(`/settings/oauth/${provider}`, { method: "POST", body: JSON.stringify({ clientId, clientSecret, enabled: true }) });
+      setProviderForm((current) => provider === "google" ? { ...current, googleClientId: "", googleClientSecret: "" } : { ...current, microsoftClientId: "", microsoftClientSecret: "" });
+      await reload();
+      notify("success", `${provider === "google" ? "Google" : "Microsoft"} OAuth is configured.`);
+    } catch (error) { notify("error", error instanceof Error ? error.message : "Failed to configure OAuth provider."); }
+    finally { setSavingProvider(null); }
   }
 
   return (
@@ -1237,33 +1226,78 @@ export function LiveSecuritySettingsPage() {
               <UserCog className="h-5 w-5 text-brand-500" />
               <div>
                 <p className="text-sm font-semibold text-ink">OAuth Providers</p>
-                <p className="text-xs text-slate-500">{data?.security.oauthProviders.join(", ") ?? "Loading..."}</p>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {data?.security.oauthProviders.map((provider) => (
+                    <span key={provider.key} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${provider.configured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {provider.name}: {provider.configured ? "Ready" : "Not configured"}
+                    </span>
+                  )) ?? <span className="text-xs text-slate-500">Loading...</span>}
+                </div>
               </div>
             </div>
           </div>
         </div>
         <div className="mt-4 grid gap-3">
+          <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="session-mode">
+            Session mode
+            <Select id="session-mode" value={sessionMode} onChange={(event) => {
+              const next = event.target.value as "password" | "oauth" | "hybrid";
+              setSessionMode(next);
+              setAllowLocalAuth(next !== "oauth");
+            }}>
+              <option value="password">Password sign-in</option>
+              <option value="hybrid">Password + OAuth</option>
+              <option value="oauth">OAuth only</option>
+            </Select>
+            <span className="font-normal">OAuth-only requires at least one configured provider.</span>
+          </label>
           <label className="flex items-center justify-between rounded-2xl border border-line px-4 py-3 text-sm text-slate-700">
             Require multi-factor authentication
             <input type="checkbox" checked={requireMfa} onChange={(event) => setRequireMfa(event.target.checked)} className="h-4 w-4 accent-[#365CF5]" />
           </label>
           <label className="flex items-center justify-between rounded-2xl border border-line px-4 py-3 text-sm text-slate-700">
             Allow local email/password auth
-            <input type="checkbox" checked={allowLocalAuth} onChange={(event) => setAllowLocalAuth(event.target.checked)} className="h-4 w-4 accent-[#365CF5]" />
+            <input type="checkbox" checked={allowLocalAuth} onChange={(event) => { setAllowLocalAuth(event.target.checked); setSessionMode(event.target.checked ? "hybrid" : "oauth"); }} className="h-4 w-4 accent-[#365CF5]" />
           </label>
-          <Input value={sessionTimeoutMinutes} onChange={(event) => setSessionTimeoutMinutes(event.target.value)} placeholder="Session timeout minutes" />
-          <Select value={themeMode} onChange={(event) => setThemeMode(event.target.value)}>
+          <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="session-timeout">
+            Session timeout (minutes)
+            <Input id="session-timeout" type="number" min={5} max={10080} step={1} value={sessionTimeoutMinutes} onChange={(event) => setSessionTimeoutMinutes(event.target.value)} placeholder="480" aria-describedby="session-timeout-help" />
+            <span id="session-timeout-help" className="font-normal">Between 5 minutes and 7 days.</span>
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-500" htmlFor="security-theme">
+            Workspace theme
+            <Select id="security-theme" value={themeMode} onChange={(event) => setThemeMode(event.target.value)}>
             <option value="light">Light</option>
             <option value="system">System</option>
             <option value="dark">Dark</option>
-          </Select>
+            </Select>
+          </label>
         </div>
+        {sessionMode !== "password" ? (
+          <div className="mt-4 rounded-[24px] border border-brand-100 bg-brand-50/40 p-4">
+            <p className="text-sm font-semibold text-ink">Configure OAuth providers</p>
+            <p className="mt-1 text-xs text-slate-500">Enter the credentials below and save. They will be written to <code>apps/api/.env</code> and applied to the running API. Secrets are never displayed after saving.</p>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {[
+                { key: "google", name: "Google", variables: "GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET" },
+                { key: "microsoft", name: "Microsoft", variables: "MICROSOFT_CLIENT_ID + MICROSOFT_CLIENT_SECRET" },
+              ].map((provider) => {
+                const status = data?.security.oauthProviders.find((item) => item.key === provider.key);
+                const google = provider.key === "google";
+                return <div key={provider.key} className="rounded-2xl border border-line bg-white/80 p-3"><div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold text-ink">{provider.name}</p><span className={`text-[11px] font-semibold ${status?.configured ? "text-emerald-700" : "text-amber-700"}`}>{status?.configured ? "Configured" : "Needs setup"}</span></div><p className="mt-1 text-xs text-slate-500">Required: <code>{provider.variables}</code></p><div className="mt-3 grid gap-2"><Input type="text" autoComplete="off" value={google ? providerForm.googleClientId : providerForm.microsoftClientId} onChange={(event) => setProviderForm((current) => google ? { ...current, googleClientId: event.target.value } : { ...current, microsoftClientId: event.target.value })} placeholder={`${provider.name} client ID`} aria-label={`${provider.name} client ID`} /><Input type="password" autoComplete="new-password" value={google ? providerForm.googleClientSecret : providerForm.microsoftClientSecret} onChange={(event) => setProviderForm((current) => google ? { ...current, googleClientSecret: event.target.value } : { ...current, microsoftClientSecret: event.target.value })} placeholder={`${provider.name} client secret`} aria-label={`${provider.name} client secret`} /><button type="button" onClick={() => void saveOAuthProvider(provider.key as "google" | "microsoft")} disabled={savingProvider !== null} className="rounded-xl bg-brand-500 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{savingProvider === provider.key ? "Saving..." : `Save ${provider.name}`}</button></div></div>;
+              })}
+            </div>
+            <p className="mt-3 text-xs text-slate-500">Register this callback URL with both providers: <code className="break-all">{data?.security.oauthRedirectUri ?? "http://localhost:4000/api/v1/auth/oauth/{provider}/callback"}</code></p>
+          </div>
+        ) : null}
         <div className="mt-4 rounded-[24px] border border-line bg-soft/50 p-4">
           <p className="text-sm font-semibold text-ink">Password Policy</p>
           <p className="mt-1 text-xs text-slate-500">{data?.security.passwordPolicy ?? "Loading..."}</p>
+          <p className="mt-3 text-xs text-slate-500">OAuth callback URL: <code className="break-all rounded bg-white px-1.5 py-0.5 text-[11px]">{data?.security.oauthRedirectUri ?? "Loading..."}</code></p>
+          <p className="mt-2 text-xs text-slate-500">Use the provider forms above to save or replace credentials. The API environment is updated automatically.</p>
         </div>
-        <button onClick={() => void saveSecurity()} className="mt-5 rounded-2xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white">
-          Save Security
+        <button disabled={!data || saving} onClick={() => void saveSecurity()} className="mt-5 rounded-2xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50">
+          {saving ? "Saving..." : "Save Security"}
         </button>
       </Card>
       <SettingsToast toast={toast} />

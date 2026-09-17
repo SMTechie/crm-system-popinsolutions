@@ -10,7 +10,9 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { PermissionGuard } from "../../common/guards/permission.guard";
 import { RequiresPermission } from "../../common/decorators/permission.decorator";
 import { StorageService } from "../../common/services/storage.service";
-import { randomBytes } from "node:crypto";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller("settings")
@@ -97,6 +99,28 @@ export class SettingsController {
     }
   }
 
+  private oauthEncryptionKey() { return createHash("sha256").update(process.env.JWT_SECRET || "popin-local-dev-secret").digest(); }
+
+  private encryptOAuthConfig(value: { clientId: string; clientSecret: string }) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", this.oauthEncryptionKey(), iv);
+    const encrypted = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()]);
+    return `${iv.toString("base64url")}.${cipher.getAuthTag().toString("base64url")}.${encrypted.toString("base64url")}`;
+  }
+
+  private saveOAuthEnv(values: Record<string, string>) {
+    const apiEnvPath = resolve(process.cwd(), "apps/api/.env");
+    const envPath = existsSync(apiEnvPath) ? apiEnvPath : resolve(process.cwd(), ".env");
+    let content = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
+    for (const [key, value] of Object.entries(values)) {
+      const line = `${key}="${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+      const pattern = new RegExp(`^${key}=.*$`, "m");
+      content = pattern.test(content) ? content.replace(pattern, line) : `${content.replace(/\s*$/, "")}\n${line}\n`;
+      process.env[key] = value;
+    }
+    writeFileSync(envPath, content, "utf8");
+  }
+
   @Get()
   async getSettings(@Tenant() tenantId: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
@@ -128,6 +152,8 @@ export class SettingsController {
       ]);
 
     const usedStorageBytes = attachmentAggregate._sum.sizeBytes ?? 0;
+    const oauthConnections = await this.prisma.integrationConnection.findMany({ where: { tenantId: tenant.id, provider: { in: ["oauth_google", "oauth_microsoft"] } }, select: { provider: true, encryptedConfig: true, enabled: true } });
+    const providerConfigured = (provider: "google" | "microsoft") => Boolean((provider === "google" ? process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET : process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) || oauthConnections.some((item) => item.provider === `oauth_${provider}` && item.enabled && item.encryptedConfig));
 
     return {
       tenant: {
@@ -185,8 +211,20 @@ export class SettingsController {
         expenses: expenseCount,
       },
       security: {
-        sessionMode: tenant.allowLocalAuth ? "Local auth + bearer token" : "OAuth-first bearer token",
-        oauthProviders: ["Google", "Microsoft"],
+        sessionMode: tenant.allowLocalAuth ? "Password + OAuth bearer token" : "OAuth-only bearer token",
+        oauthProviders: [
+          {
+            name: "Google",
+            key: "google",
+            configured: providerConfigured("google"),
+          },
+          {
+            name: "Microsoft",
+            key: "microsoft",
+            configured: providerConfigured("microsoft"),
+          },
+        ],
+        oauthRedirectUri: `${process.env.APP_BASE_URL || "http://localhost:4000"}/api/v1/auth/oauth/{provider}/callback`,
         passwordPolicy: "Minimum 10 characters for local admin accounts",
         requireMfa: tenant.requireMfa,
         allowLocalAuth: tenant.allowLocalAuth,
@@ -240,6 +278,15 @@ export class SettingsController {
     },
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
+    const oauthConnections = await this.prisma.integrationConnection.findMany({ where: { tenantId: tenant.id, provider: { in: ["oauth_google", "oauth_microsoft"] }, enabled: true }, select: { encryptedConfig: true } });
+    const hasConfiguredOAuth = Boolean((process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) || (process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET) || oauthConnections.some((item) => item.encryptedConfig));
+
+    if (body.allowLocalAuth === false && !hasConfiguredOAuth) {
+      throw new BadRequestException("OAuth-only mode requires at least one configured provider.");
+    }
+    if (body.sessionTimeoutMinutes !== undefined && (!Number.isInteger(body.sessionTimeoutMinutes) || body.sessionTimeoutMinutes < 5 || body.sessionTimeoutMinutes > 10080)) {
+      throw new BadRequestException("Session timeout must be a whole number between 5 and 10,080 minutes.");
+    }
 
     const updated = await this.prisma.tenant.update({
       where: { id: tenant.id },
@@ -342,6 +389,40 @@ export class SettingsController {
     const logoUrl = fileKey.startsWith("http") ? fileKey : `${process.env.APP_BASE_URL || "http://localhost:4000"}${fileKey}`;
     await this.prisma.tenant.update({ where: { id: tenant.id }, data: { logoUrl } });
     return { logoUrl };
+  }
+
+  @Post("oauth/:provider")
+  @RequiresPermission("settings.manage")
+  async configureOAuth(@Tenant() tenantId: string, @Param("provider") provider: string, @Body() body: { clientId?: string; clientSecret?: string; enabled?: boolean }) {
+    if (provider !== "google" && provider !== "microsoft") throw new BadRequestException("Unsupported OAuth provider.");
+    const clientId = body.clientId?.trim() || "";
+    const clientSecret = body.clientSecret?.trim() || "";
+    if (clientId.length < 5 || clientSecret.length < 5 || /[\r\n]/.test(clientId) || /[\r\n]/.test(clientSecret)) throw new BadRequestException("Enter both the OAuth client ID and client secret.");
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    this.saveOAuthEnv(provider === "google" ? { GOOGLE_CLIENT_ID: clientId, GOOGLE_CLIENT_SECRET: clientSecret } : { MICROSOFT_CLIENT_ID: clientId, MICROSOFT_CLIENT_SECRET: clientSecret });
+    await this.prisma.integrationConnection.upsert({ where: { tenantId_provider: { tenantId: tenant.id, provider: `oauth_${provider}` } }, update: { encryptedConfig: this.encryptOAuthConfig({ clientId, clientSecret }), enabled: body.enabled ?? true }, create: { tenantId: tenant.id, provider: `oauth_${provider}`, encryptedConfig: this.encryptOAuthConfig({ clientId, clientSecret }), enabled: body.enabled ?? true } });
+    return { provider, configured: true };
+  }
+
+  @Post("payment/:provider")
+  @RequiresPermission("settings.manage")
+  async configurePaymentProvider(@Param("provider") provider: string, @Body() body: { secretKey?: string; publicKey?: string; appId?: string; appSecret?: string; entityId?: string; starterCents?: string; growthCents?: string; enterpriseCents?: string }) {
+    if (provider !== "yoco" && provider !== "ikhokha") throw new BadRequestException("Unsupported payment provider.");
+    const values: Record<string, string> = {};
+    if (provider === "yoco") {
+      if (!body.secretKey?.trim()) throw new BadRequestException("Enter the Yoco secret key.");
+      values.YOCO_SECRET_KEY = body.secretKey.trim();
+      if (body.publicKey?.trim()) values.YOCO_PUBLIC_KEY = body.publicKey.trim();
+    } else {
+      if (!body.appId?.trim() || !body.appSecret?.trim()) throw new BadRequestException("Enter the iKhokha App ID and App Secret.");
+      values.IKHOKHA_APP_ID = body.appId.trim();
+      values.IKHOKHA_APP_SECRET = body.appSecret.trim();
+      if (body.entityId?.trim()) values.IKHOKHA_ENTITY_ID = body.entityId.trim();
+    }
+    const prices = { PAYMENT_PRICE_STARTER_MONTHLY_CENTS: body.starterCents, PAYMENT_PRICE_GROWTH_MONTHLY_CENTS: body.growthCents, PAYMENT_PRICE_ENTERPRISE_MONTHLY_CENTS: body.enterpriseCents };
+    for (const [key, value] of Object.entries(prices)) if (value?.trim()) { if (!/^\d+$/.test(value.trim()) || Number(value) < 100) throw new BadRequestException("Plan prices must be whole amounts of at least 100 cents."); values[key] = value.trim(); }
+    this.saveOAuthEnv(values);
+    return { provider, configured: true };
   }
 
   @Post("team")

@@ -1400,11 +1400,6 @@ export class AccountingController {
     throw new BadRequestException("Posted payments cannot be deleted; create a reversal transaction instead.");
   }
 
-  @Post("payments/webhook/stripe")
-  stripeWebhook() {
-    return { status: "accepted" };
-  }
-
   private async prepareJournalLines(
     tenantId: string,
     lines?: Array<{

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { ModuleAccess } from "../../common/decorators/module-access.decorator";
 import { Tenant } from "../../common/decorators/tenant.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -14,7 +14,7 @@ export class BillingController {
   @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
   @ModuleAccess("settings")
   @RequiresPermission("settings.manage")
-  @Get("stripe/config")
+  @Get("config")
   config() {
     return this.billingService.getBillingConfig();
   }
@@ -22,32 +22,8 @@ export class BillingController {
   @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
   @ModuleAccess("settings")
   @RequiresPermission("settings.manage")
-  @Post("stripe/checkout-session")
-  createCheckoutSession(@Tenant() tenantId: string, @Body() body: { planCode?: string }) {
-    return this.billingService.createCheckoutSession(tenantId, body.planCode ?? "enterprise");
-  }
-
-  @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
-  @ModuleAccess("settings")
-  @RequiresPermission("settings.manage")
-  @Post("stripe/portal-session")
-  createPortalSession(@Tenant() tenantId: string) {
-    return this.billingService.createPortalSession(tenantId);
-  }
-
-  @UseGuards(JwtAuthGuard, ModuleAccessGuard, PermissionGuard)
-  @ModuleAccess("settings")
-  @RequiresPermission("settings.manage")
-  @Post("stripe/sync")
-  sync(@Tenant() tenantId: string) {
-    return this.billingService.syncTenantSubscription(tenantId);
-  }
-
-  @Post("stripe/webhook")
-  webhook(
-    @Headers("stripe-signature") signature: string | undefined,
-    @Req() request: { rawBody?: Buffer; body?: unknown },
-  ) {
-    return this.billingService.handleWebhook(signature, request.rawBody ?? JSON.stringify(request.body ?? {}));
+  @Post(":provider/checkout")
+  createCheckoutSession(@Tenant() tenantId: string, @Param("provider") provider: "yoco" | "ikhokha", @Body() body: { planCode?: string }) {
+    return this.billingService.createCheckoutSession(provider, tenantId, body.planCode ?? "enterprise");
   }
 }

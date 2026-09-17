@@ -85,6 +85,10 @@ a {
   box-shadow: var(--shadow-card);
 }
 
+.theme-card {
+  background-color: rgb(var(--color-surface-muted));
+}
+
 .theme-surface-muted {
   background: rgb(var(--color-surface-muted));
   border-color: rgb(var(--color-line));
