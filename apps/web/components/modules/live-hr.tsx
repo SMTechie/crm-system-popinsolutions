@@ -9,9 +9,10 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Download, Plus, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api";
+import { API_BASE_URL, apiFetch } from "@/lib/api";
+import { getStoredSession } from "@/lib/session";
 
 type HrOverview = {
   employees: number;
@@ -49,6 +50,7 @@ type Employee = {
   bankAccountNumber?: string | null;
   bankBranch?: string | null;
   bankAccountType?: string | null;
+  attendanceQrToken?: string | null;
   _count?: {
     leaveRequests: number;
     documents: number;
@@ -91,7 +93,10 @@ type PayrollRun = {
   netAmount: string | number;
   status: string;
   notes?: string | null;
+  deductionItems?: PayrollDeduction[];
 };
+
+type PayrollDeduction = { id?: string; name: string; mode: "AMOUNT" | "PERCENT"; value: string };
 
 type PerformanceReview = {
   id: string;
@@ -174,6 +179,9 @@ const emptyPayroll = {
   payDate: today,
   grossAmount: "",
   deductions: "",
+  deductionsInput: "",
+  deductionsMode: "AMOUNT",
+  deductionItems: [{ name: "", mode: "AMOUNT", value: "" }] as PayrollDeduction[],
   netAmount: "",
   status: "DRAFT",
   notes: "",
@@ -364,7 +372,7 @@ function BaseModal({
 }
 
 function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`rounded-2xl border border-line px-4 py-3 text-sm text-ink outline-none transition focus:border-brand-500 ${props.className ?? ""}`} />;
+  return <input {...props} className={`w-full rounded-2xl border border-line px-4 py-3 text-sm text-ink outline-none transition focus:border-brand-500 ${props.className ?? ""}`} />;
 }
 
 function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
@@ -439,67 +447,77 @@ function useHrData() {
 function EmployeeModal({
   form,
   setForm,
+  selectedPhoto,
+  setSelectedPhoto,
+  selectedDocuments,
+  setSelectedDocuments,
   onClose,
   onSave,
 }: {
   form: typeof emptyEmployee;
   setForm: Dispatch<SetStateAction<typeof emptyEmployee>>;
+  selectedPhoto: File | null;
+  setSelectedPhoto: (file: File | null) => void;
+  selectedDocuments: File[];
+  setSelectedDocuments: (files: File[]) => void;
   onClose: () => void;
   onSave: () => void;
 }) {
   return (
     <BaseModal label={form.id ? "Edit Employee" : "Add Employee"} title="Manage employee profile" onClose={onClose} onSave={onSave} saveLabel={form.id ? "Update Employee" : "Save Employee"}>
-      <div className="grid gap-3 md:grid-cols-2">
-        <Input value={form.employeeNumber} onChange={(event) => setForm((current) => ({ ...current, employeeNumber: event.target.value }))} placeholder="Employee number (optional)" />
-        <Input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" />
-        <Input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="Email address" />
-        <Input value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone number" />
-        <Input value={form.idPassportNumber} onChange={(event) => setForm((current) => ({ ...current, idPassportNumber: event.target.value }))} placeholder="ID / passport number" />
-        <Input type="date" value={form.dateOfBirth} onChange={(event) => setForm((current) => ({ ...current, dateOfBirth: event.target.value }))} />
-        <Input value={form.gender} onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))} placeholder="Gender" />
-        <Input value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} placeholder="Address" />
-        <Input value={form.emergencyContactName} onChange={(event) => setForm((current) => ({ ...current, emergencyContactName: event.target.value }))} placeholder="Emergency contact name" />
-        <Input value={form.emergencyContactPhone} onChange={(event) => setForm((current) => ({ ...current, emergencyContactPhone: event.target.value }))} placeholder="Emergency contact phone" />
-        <Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Job title" />
-        <Input value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} placeholder="Department" />
-        <Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} placeholder="Location" />
-        <Input value={form.managerName} onChange={(event) => setForm((current) => ({ ...current, managerName: event.target.value }))} placeholder="Manager" />
-        <Select value={form.employmentStatus} onChange={(event) => setForm((current) => ({ ...current, employmentStatus: event.target.value }))}>
-          {["ACTIVE", "ON_LEAVE", "PROBATION", "OFFBOARDED"].map((item) => (
-            <option key={item} value={item}>{item}</option>
-          ))}
-        </Select>
-        <Select value={form.employmentType} onChange={(event) => setForm((current) => ({ ...current, employmentType: event.target.value }))}>
-          {["FULL_TIME", "PART_TIME", "CONTRACT", "TEMPORARY", "INTERN"].map((item) => <option key={item} value={item}>{item}</option>)}
-        </Select>
-        <Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} />
-        <Input type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} />
-        <Input type="number" min="0" step="0.01" value={form.salaryAmount} onChange={(event) => setForm((current) => ({ ...current, salaryAmount: event.target.value }))} placeholder="Monthly salary" />
-        <Input value={form.bankName} onChange={(event) => setForm((current) => ({ ...current, bankName: event.target.value }))} placeholder="Bank" />
-        <Input value={form.bankAccountHolder} onChange={(event) => setForm((current) => ({ ...current, bankAccountHolder: event.target.value }))} placeholder="Account holder" />
-        <Input value={form.bankAccountNumber} onChange={(event) => setForm((current) => ({ ...current, bankAccountNumber: event.target.value }))} placeholder="Account number" />
-        <Input value={form.bankBranch} onChange={(event) => setForm((current) => ({ ...current, bankBranch: event.target.value }))} placeholder="Branch" />
-        <Input value={form.bankAccountType} onChange={(event) => setForm((current) => ({ ...current, bankAccountType: event.target.value }))} placeholder="Account type" />
+      <div className="space-y-5">
+        <section className="rounded-3xl border border-line bg-slate-50/70 p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Identity and contact</p><p className="mt-1 text-sm text-slate-600">Core employee details used across HR, payroll, and payslips.</p></div><div className="grid gap-3 md:grid-cols-2"><Input value={form.employeeNumber} onChange={(event) => setForm((current) => ({ ...current, employeeNumber: event.target.value }))} placeholder="Employee number (optional)" /><Input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" required /><Input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="Email address" required /><Input type="tel" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone number" /><Input value={form.idPassportNumber} onChange={(event) => setForm((current) => ({ ...current, idPassportNumber: event.target.value }))} placeholder="ID / passport number" /><label className="text-xs font-semibold text-slate-500">Date of birth<Input className="mt-1" type="date" value={form.dateOfBirth} onChange={(event) => setForm((current) => ({ ...current, dateOfBirth: event.target.value }))} /></label><Select value={form.gender} onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}><option value="">Select gender</option><option value="FEMALE">Female</option><option value="MALE">Male</option><option value="NON_BINARY">Non-binary</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option></Select><Textarea value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} rows={2} className="md:col-span-2" placeholder="Residential address" /></div></section>
+        <section className="rounded-3xl border border-line bg-white p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Employment</p><p className="mt-1 text-sm text-slate-600">Set the employee’s role, reporting line, status, and employment dates.</p></div><div className="grid gap-3 md:grid-cols-2"><Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Job title" required /><Input value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} placeholder="Department" /><Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} placeholder="Work location" /><Input value={form.managerName} onChange={(event) => setForm((current) => ({ ...current, managerName: event.target.value }))} placeholder="Manager / supervisor" /><Select value={form.employmentStatus} onChange={(event) => setForm((current) => ({ ...current, employmentStatus: event.target.value }))}>{["ACTIVE", "ON_LEAVE", "PROBATION", "OFFBOARDED"].map((item) => <option key={item} value={item}>{item}</option>)}</Select><Select value={form.employmentType} onChange={(event) => setForm((current) => ({ ...current, employmentType: event.target.value }))}>{["FULL_TIME", "PART_TIME", "CONTRACT", "TEMPORARY", "INTERN"].map((item) => <option key={item} value={item}>{item}</option>)}</Select><label className="text-xs font-semibold text-slate-500">Start date<Input className="mt-1" type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} required /></label><label className="text-xs font-semibold text-slate-500">End date (optional)<Input className="mt-1" type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></label></div></section>
+        <section className="rounded-3xl border border-line bg-white p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Compensation and banking</p><p className="mt-1 text-sm text-slate-600">These details support payroll preparation and payslip processing.</p></div><div className="grid gap-3 md:grid-cols-2"><label className="text-xs font-semibold text-slate-500">Monthly salary<Input className="mt-1" type="number" min="0" step="0.01" value={form.salaryAmount} onChange={(event) => setForm((current) => ({ ...current, salaryAmount: event.target.value }))} placeholder="0.00" /></label><Input value={form.bankName} onChange={(event) => setForm((current) => ({ ...current, bankName: event.target.value }))} placeholder="Bank name" /><Input value={form.bankAccountHolder} onChange={(event) => setForm((current) => ({ ...current, bankAccountHolder: event.target.value }))} placeholder="Account holder" /><Input inputMode="numeric" value={form.bankAccountNumber} onChange={(event) => setForm((current) => ({ ...current, bankAccountNumber: event.target.value }))} placeholder="Account number" /><Input value={form.bankBranch} onChange={(event) => setForm((current) => ({ ...current, bankBranch: event.target.value }))} placeholder="Branch code" /><Select value={form.bankAccountType} onChange={(event) => setForm((current) => ({ ...current, bankAccountType: event.target.value }))}><option value="">Account type</option><option value="CHEQUE">Cheque</option><option value="SAVINGS">Savings</option><option value="CURRENT">Current</option></Select></div></section>
+        <section className="rounded-3xl border border-line bg-slate-50/70 p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Emergency contact and files</p><p className="mt-1 text-sm text-slate-600">Attach a profile picture and employee records such as IDs, contracts, or tax documents.</p></div><div className="grid gap-3 md:grid-cols-2"><Input value={form.emergencyContactName} onChange={(event) => setForm((current) => ({ ...current, emergencyContactName: event.target.value }))} placeholder="Emergency contact name" /><Input type="tel" value={form.emergencyContactPhone} onChange={(event) => setForm((current) => ({ ...current, emergencyContactPhone: event.target.value }))} placeholder="Emergency contact phone" /><label className="rounded-2xl border border-dashed border-brand-300 bg-white p-4 text-xs font-semibold text-slate-600">Profile picture<input type="file" accept="image/png,image/jpeg" onChange={(event) => setSelectedPhoto(event.target.files?.[0] ?? null)} className="mt-2 block w-full text-xs" />{selectedPhoto ? <span className="mt-1 block truncate font-normal text-slate-500">{selectedPhoto.name}</span> : null}</label><label className="rounded-2xl border border-dashed border-brand-300 bg-white p-4 text-xs font-semibold text-slate-600">Employee documents<input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.txt,.docx" onChange={(event) => setSelectedDocuments(Array.from(event.target.files ?? []))} className="mt-2 block w-full text-xs" />{selectedDocuments.length ? <span className="mt-1 block font-normal text-slate-500">{selectedDocuments.length} file(s) selected</span> : null}</label></div></section>
       </div>
     </BaseModal>
   );
 }
 
-function LeaveModal({ form, setForm, employees, onClose, onSave }: { form: typeof emptyLeave; setForm: Dispatch<SetStateAction<typeof emptyLeave>>; employees: Employee[]; onClose: () => void; onSave: () => void }) {
+function EmployeeViewModal({ employee, documents, attendance, onClose }: { employee: Employee; documents: EmployeeDocument[]; attendance: AttendanceRecord[]; onClose: () => void }) {
+  const employeeDocuments = documents.filter((document) => document.employeeId === employee.id);
+  const [employeeAttendance, setEmployeeAttendance] = useState<AttendanceRecord[]>(attendance.filter((record) => record.employeeId === employee.id).slice(0, 10));
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [qrError, setQrError] = useState("");
+  useEffect(() => {
+    void apiFetch<{ qrDataUrl: string }>(`/attendance/employee-qr/${employee.id}`, { method: "POST" })
+      .then((result) => setQrDataUrl(result.qrDataUrl))
+      .catch((error) => setQrError(error instanceof Error ? error.message : "Unable to load QR code."));
+  }, [employee.id]);
+  useEffect(() => {
+    void apiFetch<{ items: AttendanceRecord[] }>(`/hr/attendance?employeeId=${encodeURIComponent(employee.id)}&pageSize=50`)
+      .then((result) => setEmployeeAttendance(result.items.slice(0, 10)))
+      .catch(() => undefined);
+  }, [employee.id]);
+  const value = (item?: string | null) => item || "Not provided";
   return (
-    <BaseModal label={form.id ? "Edit Leave" : "Add Leave"} title="Manage leave request" onClose={onClose} onSave={onSave} saveLabel={form.id ? "Update Leave" : "Save Leave"}>
-      <div className="grid gap-3 md:grid-cols-2">
-        <Select value={form.employeeId} onChange={(event) => setForm((current) => ({ ...current, employeeId: event.target.value }))} className="md:col-span-2">
-          <option value="">Select employee</option>
-          {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}
-        </Select>
-        <Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} />
-        <Input type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} />
-        <Input value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))} placeholder="Leave type" />
-        <Select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-          {["PENDING", "APPROVED", "REJECTED"].map((item) => <option key={item} value={item}>{item}</option>)}
-        </Select>
-        <Textarea value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} rows={4} className="md:col-span-2" placeholder="Reason" />
+    <BaseModal label="Employee profile" title={employee.fullName} onClose={onClose} onSave={onClose} saveLabel="Close">
+      <div className="space-y-5">
+        <div className="flex items-center gap-4 rounded-3xl border border-line bg-slate-50/70 p-4"><div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-500 text-xl font-semibold text-white">{employee.fullName.slice(0, 2).toUpperCase()}</div><div><p className="text-lg font-semibold text-ink">{employee.fullName}</p><p className="text-sm text-slate-500">{employee.title} · {employee.department || "General"}</p><p className="mt-1 text-xs text-slate-500">{employee.email}</p></div><span className="ml-auto rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{employee.employmentStatus || "ACTIVE"}</span></div>
+        <section className="rounded-3xl border border-line p-4"><p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Employment and contact</p><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[["Employee number", employee.employeeNumber], ["Phone", employee.phone], ["Employment type", employee.employmentType], ["Start date", employee.startDate?.slice(0, 10)], ["End date", employee.endDate?.slice(0, 10)], ["Location", employee.location], ["Manager", employee.managerName], ["Date of birth", employee.dateOfBirth?.slice(0, 10)], ["ID / passport", employee.idPassportNumber]].map(([label, item]) => <div key={label}><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-sm font-medium text-ink">{value(item)}</p></div>)}</div></section>
+        <section className="grid gap-5 md:grid-cols-2"><div className="rounded-3xl border border-line p-4"><p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Payroll and banking</p><div className="space-y-3 text-sm"><div className="flex justify-between gap-3"><span className="text-slate-500">Monthly salary</span><strong className="text-ink">{formatMoney(employee.salaryAmount)}</strong></div><div className="flex justify-between gap-3"><span className="text-slate-500">Bank</span><strong className="text-ink">{value(employee.bankName)}</strong></div><div className="flex justify-between gap-3"><span className="text-slate-500">Account holder</span><strong className="text-ink">{value(employee.bankAccountHolder)}</strong></div><div className="flex justify-between gap-3"><span className="text-slate-500">Account type</span><strong className="text-ink">{value(employee.bankAccountType)}</strong></div><div className="flex justify-between gap-3"><span className="text-slate-500">Account number</span><strong className="text-ink">{value(employee.bankAccountNumber)}</strong></div></div></div><div className="rounded-3xl border border-line p-4"><p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Emergency contact</p><p className="text-sm font-semibold text-ink">{value(employee.emergencyContactName)}</p><p className="mt-1 text-sm text-slate-500">{value(employee.emergencyContactPhone)}</p><p className="mt-4 text-xs text-slate-500">Address</p><p className="mt-1 text-sm text-ink">{value(employee.address)}</p></div></section>
+        <section className="grid gap-5 md:grid-cols-2"><div className="rounded-3xl border border-line p-4"><div className="flex items-center justify-between"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Attendance QR code</p><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">Ready</span></div>{qrDataUrl ? <><img src={qrDataUrl} alt={`Attendance QR code for ${employee.fullName}`} className="mx-auto mt-3 h-40 w-40 rounded-2xl border border-line p-2" /><div className="mt-3 flex justify-center gap-2"><a href={qrDataUrl} download={`${employee.fullName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-attendance-qr.png`} className="rounded-xl bg-brand-500 px-3 py-2 text-xs font-semibold text-white">Download</a><button onClick={() => window.print()} className="rounded-xl border border-line px-3 py-2 text-xs font-semibold text-slate-700">Print</button></div></> : <p className="mt-3 text-sm text-slate-500">{qrError || "Loading QR code…"}</p>}</div><div className="rounded-3xl border border-line p-4"><div className="flex items-center justify-between"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Attendance history</p><span className="rounded-full bg-soft px-2.5 py-1 text-xs font-semibold text-slate-600">{employeeAttendance.length}</span></div>{employeeAttendance.length ? <div className="mt-3 space-y-2">{employeeAttendance.map((record) => <div key={record.id} className="rounded-2xl bg-slate-50 px-3 py-2.5"><div className="flex items-center justify-between gap-2"><p className="text-sm font-semibold text-ink">{formatDate(record.date)}</p><span className="text-xs font-semibold text-emerald-700">{record.status}</span></div><p className="mt-1 text-xs text-slate-500">In: {fromIsoTime(record.checkInAt) || "—"} · Out: {fromIsoTime(record.checkOutAt) || "—"}</p><p className="mt-1 truncate text-[11px] text-slate-400">{record.notes || "No notes"}</p></div>)}</div> : <p className="mt-3 text-sm text-slate-500">No attendance history yet.</p>}</div></section>
+        <section className="rounded-3xl border border-line p-4"><div className="flex items-center justify-between"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Attached documents</p><span className="rounded-full bg-soft px-2.5 py-1 text-xs font-semibold text-slate-600">{employeeDocuments.length}</span></div>{employeeDocuments.length ? <div className="mt-3 space-y-2">{employeeDocuments.map((document) => <div key={document.id} className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2.5"><div><p className="text-sm font-medium text-ink">{document.label}</p><p className="text-xs text-slate-500">{document.category || "Employee document"}</p></div><span className="text-xs text-slate-500">{document.expiresAt ? `Expires ${document.expiresAt.slice(0, 10)}` : "No expiry"}</span></div>)}</div> : <p className="mt-3 text-sm text-slate-500">No documents attached yet.</p>}</section>
+      </div>
+    </BaseModal>
+  );
+}
+
+function HrDetailModal({ title, subtitle, fields, onClose }: { title: string; subtitle?: string; fields: Array<[string, string]>; onClose: () => void }) {
+  return <BaseModal label="Record details" title={title} onClose={onClose} onSave={onClose} saveLabel="Close"><div className="space-y-4"><p className="text-sm text-slate-500">{subtitle || "Review the saved record details below."}</p><div className="grid gap-3 sm:grid-cols-2">{fields.map(([label, value]) => <div key={label} className="rounded-2xl border border-line bg-slate-50/70 p-3"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 break-words text-sm font-semibold text-ink">{value || "Not provided"}</p></div>)}</div></div></BaseModal>;
+}
+
+function LeaveModal({ form, setForm, employees, onClose, onSave }: { form: typeof emptyLeave; setForm: Dispatch<SetStateAction<typeof emptyLeave>>; employees: Employee[]; onClose: () => void; onSave: () => void }) {
+  const start = form.startDate ? new Date(form.startDate).getTime() : 0;
+  const end = form.endDate ? new Date(form.endDate).getTime() : 0;
+  const leaveDays = start && end && end >= start ? Math.floor((end - start) / 86400000) + 1 : 0;
+  return (
+    <BaseModal label={form.id ? "Edit Leave Request" : "Add Leave Request"} title="Prepare a leave request" onClose={onClose} onSave={onSave} saveLabel={form.id ? "Update Request" : "Submit Request"}>
+      <div className="space-y-5">
+        <section className="rounded-3xl border border-line bg-slate-50/70 p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Employee</p><p className="mt-1 text-sm text-slate-600">Select the employee submitting this leave request.</p></div><Select value={form.employeeId} onChange={(event) => setForm((current) => ({ ...current, employeeId: event.target.value }))} className="w-full"><option value="">Select employee</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}{employee.department ? ` · ${employee.department}` : ""}</option>)}</Select></section>
+        <section className="rounded-3xl border border-line bg-white p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Leave period</p><p className="mt-1 text-sm text-slate-600">Choose the first and last day of the requested leave.</p></div><div className="grid gap-3 md:grid-cols-2"><label className="text-xs font-semibold text-slate-500">Start date<Input className="mt-1" type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></label><label className="text-xs font-semibold text-slate-500">End date<Input className="mt-1" type="date" min={form.startDate} value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></label><div className="flex items-center justify-between rounded-2xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm md:col-span-2"><span className="text-slate-600">Requested duration</span><strong className="text-brand-700">{leaveDays ? `${leaveDays} day${leaveDays === 1 ? "" : "s"}` : "Set valid dates"}</strong></div></div></section>
+        <section className="rounded-3xl border border-line bg-slate-50/70 p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Request details</p></div><div className="grid gap-3 md:grid-cols-2"><Select value={form.type} onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}><option value="PTO">Paid time off</option><option value="SICK">Sick leave</option><option value="UNPAID">Unpaid leave</option><option value="PARENTAL">Parental leave</option><option value="BEREAVEMENT">Bereavement leave</option><option value="OTHER">Other</option></Select><Select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>{["PENDING", "APPROVED", "REJECTED"].map((item) => <option key={item} value={item}>{item}</option>)}</Select><Textarea value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} rows={4} className="md:col-span-2" placeholder="Reason or supporting context (optional)" /></div></section>
       </div>
     </BaseModal>
   );
@@ -526,23 +544,55 @@ function AttendanceModal({ form, setForm, employees, onClose, onSave }: { form: 
 }
 
 function PayrollModal({ form, setForm, employees, onClose, onSave }: { form: typeof emptyPayroll; setForm: Dispatch<SetStateAction<typeof emptyPayroll>>; employees: Employee[]; onClose: () => void; onSave: () => void }) {
+  const selectedEmployee = employees.find((employee) => employee.id === form.employeeId);
+  const gross = Math.max(0, Number(form.grossAmount) || 0);
+  const deductions = Math.min(gross, form.deductionItems.reduce((sum, item) => sum + (item.mode === "PERCENT" ? gross * Math.max(0, Number(item.value) || 0) / 100 : Math.max(0, Number(item.value) || 0)), 0));
+  const net = Math.max(0, gross - deductions);
+  const money = (value: number) => `ZAR ${value.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const updateDeduction = (index: number, key: keyof PayrollDeduction, value: string) => setForm((current) => ({ ...current, deductionItems: current.deductionItems.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item) }));
+  const addDeduction = () => setForm((current) => ({ ...current, deductionItems: [...current.deductionItems, { name: "", mode: "AMOUNT", value: "" }] }));
+  const removeDeduction = (index: number) => setForm((current) => ({ ...current, deductionItems: current.deductionItems.length === 1 ? current.deductionItems : current.deductionItems.filter((_, itemIndex) => itemIndex !== index) }));
   return (
-    <BaseModal label={form.id ? "Edit Payroll" : "Add Payroll"} title="Manage payroll run" onClose={onClose} onSave={onSave} saveLabel={form.id ? "Update Payroll" : "Save Payroll"}>
-      <div className="grid gap-3 md:grid-cols-2">
-        <Select value={form.employeeId} onChange={(event) => setForm((current) => ({ ...current, employeeId: event.target.value }))} className="md:col-span-2">
-          <option value="">Select employee</option>
-          {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}
-        </Select>
-        <Input value={form.periodLabel} onChange={(event) => setForm((current) => ({ ...current, periodLabel: event.target.value }))} placeholder="Period label" />
-        <Input type="date" value={form.payDate} onChange={(event) => setForm((current) => ({ ...current, payDate: event.target.value }))} />
-        <Input type="number" min="0" step="0.01" value={form.grossAmount} onChange={(event) => setForm((current) => ({ ...current, grossAmount: event.target.value }))} placeholder="Gross amount" />
-        <Input type="number" min="0" step="0.01" value={form.deductions} onChange={(event) => setForm((current) => ({ ...current, deductions: event.target.value }))} placeholder="Deductions" />
-        <Input type="number" min="0" step="0.01" value={form.netAmount} onChange={(event) => setForm((current) => ({ ...current, netAmount: event.target.value }))} placeholder="Net amount" />
-        <Select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
-          {["DRAFT", "APPROVED", "PAID"].map((item) => <option key={item} value={item}>{item}</option>)}
-        </Select>
-        <Textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} rows={4} className="md:col-span-2" placeholder="Notes" />
-      </div>
+    <BaseModal label={form.id ? "Edit Payroll Run" : "Add Payroll Run"} title="Prepare a professional payroll record" onClose={onClose} onSave={onSave} saveLabel={form.id ? "Update Payroll" : "Save Payroll"}>
+      <div className="space-y-5">
+          <section className="rounded-3xl border border-line bg-slate-50/70 p-4">
+            <div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Employee and period</p><p className="mt-1 text-sm text-slate-600">Choose the employee and pay date for this payroll record.</p></div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Select value={form.employeeId} onChange={(event) => setForm((current) => ({ ...current, employeeId: event.target.value }))} className="md:col-span-2">
+                <option value="">Select employee</option>
+                {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.fullName}</option>)}
+              </Select>
+              <Input value={form.periodLabel} onChange={(event) => setForm((current) => ({ ...current, periodLabel: event.target.value }))} placeholder="Pay period, e.g. August 2026" />
+              <Input type="date" value={form.payDate} onChange={(event) => setForm((current) => ({ ...current, payDate: event.target.value }))} />
+            </div>
+          </section>
+          <section className="rounded-3xl border border-line bg-white p-4">
+            <div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Pay calculation</p><p className="mt-1 text-sm text-slate-600">Net pay is calculated automatically from gross pay less deductions.</p></div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block text-xs font-semibold text-slate-500">Gross pay<Input className="mt-1" type="number" min="0" step="0.01" value={form.grossAmount} onChange={(event) => setForm((current) => ({ ...current, grossAmount: event.target.value }))} placeholder="0.00" /></label>
+              <div className="flex min-h-[52px] items-center justify-between gap-3 rounded-2xl border border-line bg-soft/50 px-4 py-3 text-sm text-slate-600"><span className="shrink-0">Total deductions</span><strong className="min-w-0 truncate text-right text-rose-600">{money(deductions)}</strong></div>
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 md:col-span-2"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Net pay</p><p className="mt-1 text-2xl font-semibold text-emerald-900">{money(net)}</p></div>
+            </div>
+            <div className="mt-5 rounded-2xl border border-line bg-slate-50/70 p-3 md:col-span-2"><div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-semibold text-ink">Deductions breakdown</p><p className="text-xs text-slate-500">Name every deduction and choose an amount or percentage.</p></div><button type="button" onClick={addDeduction} className="rounded-xl bg-brand-500 px-3 py-2 text-xs font-semibold text-white">Add deduction</button></div><div className="space-y-2">{form.deductionItems.map((item, index) => <div key={index} className="grid gap-2 rounded-xl border border-line bg-white p-2 md:grid-cols-[minmax(0,1fr)_120px_130px_34px]"><Input value={item.name} onChange={(event) => updateDeduction(index, "name", event.target.value)} placeholder="Deduction name, e.g. PAYE" /><Input type="number" min="0" max={item.mode === "PERCENT" ? 100 : undefined} step="0.01" value={item.value} onChange={(event) => updateDeduction(index, "value", event.target.value)} placeholder="Value" /><Select value={item.mode} onChange={(event) => updateDeduction(index, "mode", event.target.value)}><option value="AMOUNT">Fixed amount</option><option value="PERCENT">Percentage</option></Select><button type="button" onClick={() => removeDeduction(index)} disabled={form.deductionItems.length === 1} className="rounded-xl border border-rose-200 text-rose-600 disabled:opacity-30">×</button></div>)}</div></div>
+          </section>
+          <section className="grid gap-3 md:grid-cols-2">
+            <Select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}>
+              {["DRAFT", "APPROVED", "PAID"].map((item) => <option key={item} value={item}>{item}</option>)}
+            </Select>
+            <div className="rounded-2xl border border-line bg-soft/50 px-4 py-3 text-xs text-slate-600">Use <strong className="text-ink">Approved</strong> when reviewed and <strong className="text-ink">Paid</strong> after payment.</div>
+            <Textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} rows={4} className="md:col-span-2" placeholder="Payroll notes, payment reference, or approval comments" />
+          </section>
+        </div>
+        <aside className="hidden">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Payroll summary</p>
+          <div className="mt-4 rounded-2xl border border-line bg-white p-4">
+            <p className="text-sm font-semibold text-ink">{selectedEmployee?.fullName || "Select an employee"}</p>
+            <p className="mt-1 text-xs text-slate-500">{selectedEmployee?.title || selectedEmployee?.department || "Employee profile"}</p>
+            <div className="mt-4 space-y-3 border-t border-line pt-4 text-sm"><div className="flex justify-between gap-3"><span className="text-slate-500">Pay period</span><strong className="text-ink">{form.periodLabel || "Not set"}</strong></div><div className="flex justify-between gap-3"><span className="text-slate-500">Pay date</span><strong className="text-ink">{form.payDate || "Not set"}</strong></div><div className="flex justify-between gap-3"><span className="text-slate-500">Gross pay</span><strong className="text-ink">{money(gross)}</strong></div><div className="flex justify-between gap-3"><span className="text-slate-500">Deductions</span><strong className="text-rose-600">− {money(deductions)}</strong></div></div>
+            <div className="mt-4 flex items-end justify-between border-t border-line pt-4"><span className="text-sm font-semibold text-ink">Net pay</span><strong className="text-xl text-brand-500">{money(net)}</strong></div>
+          </div>
+          <p className="mt-3 text-xs leading-5 text-slate-500">Review the employee, pay period, gross amount, deductions, and status before saving.</p>
+        </aside>
     </BaseModal>
   );
 }
@@ -687,12 +737,16 @@ export function LiveHr() {
 }
 
 export function LiveEmployeesPage() {
-  const { employees, toast, notify, reload } = useHrData();
+  const { employees, documents, attendance, toast, notify, reload } = useHrData();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyEmployee);
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const [selectedDocuments, setSelectedDocuments] = useState<File[]>([]);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [employeeQr, setEmployeeQr] = useState<{ employee: Employee; qrDataUrl: string; scanUrl: string } | null>(null);
 
   const departmentOptions = useMemo(() => Array.from(new Set(employees.map((item) => item.department || "General"))).sort(), [employees]);
   const filtered = useMemo(() => {
@@ -737,14 +791,30 @@ export function LiveEmployeesPage() {
         bankBranch: form.bankBranch || "",
         bankAccountType: form.bankAccountType || "",
       };
+      let employeeId = form.id;
       if (form.id) {
         await apiFetch(`/hr/employees/${form.id}`, { method: "PATCH", body: JSON.stringify(payload) });
         notify("success", "Employee updated successfully.");
       } else {
-        await apiFetch("/hr/employees", { method: "POST", body: JSON.stringify(payload) });
+        const result = await apiFetch<{ item?: Employee }>("/hr/employees", { method: "POST", body: JSON.stringify(payload) });
+        employeeId = result.item?.id ?? "";
         notify("success", "Employee created successfully.");
       }
+      const files = [...(selectedPhoto ? [selectedPhoto] : []), ...selectedDocuments];
+      if (employeeId && files.length) {
+        await Promise.all(files.map(async (file, index) => {
+          const multipart = new FormData();
+          multipart.append("file", file);
+          multipart.append("employeeId", employeeId);
+          multipart.append("label", index === 0 && selectedPhoto ? "Profile picture" : file.name);
+          multipart.append("category", index === 0 && selectedPhoto ? "PROFILE_PHOTO" : "EMPLOYEE_DOCUMENT");
+          await apiFetch("/hr/documents/upload", { method: "POST", body: multipart });
+        }));
+        notify("success", `${files.length} employee file${files.length === 1 ? "" : "s"} uploaded.`);
+      }
       setForm(emptyEmployee);
+      setSelectedPhoto(null);
+      setSelectedDocuments([]);
       setShowForm(false);
       await reload();
     } catch (error) {
@@ -763,10 +833,20 @@ export function LiveEmployeesPage() {
     }
   }
 
+  async function generateEmployeeQr(employee: Employee) {
+    try {
+      const result = await apiFetch<{ qrDataUrl: string; scanUrl: string }>(`/attendance/employee-qr/${employee.id}`, { method: "POST" });
+      setEmployeeQr({ employee, qrDataUrl: result.qrDataUrl, scanUrl: result.scanUrl });
+      notify("success", `Attendance QR ready for ${employee.fullName}.`);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Unable to generate employee QR code.");
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
-        <TableHeader label="Employees" title="Team directory" description="Search, filter, add, edit, and remove live employee records from Neon." count={filtered.length} addLabel="Add employee" onAdd={() => { setForm(emptyEmployee); setShowForm(true); }} search={search} setSearch={setSearch} searchPlaceholder="Search employee, email, title, department" filter={filter} setFilter={setFilter} filterOptions={[{ value: "ALL", label: "All departments" }, ...departmentOptions.map((item) => ({ value: item, label: item }))]} />
+        <TableHeader label="Employees" title="Team directory" description="Search, filter, add, edit, and remove live employee records from Neon." count={filtered.length} addLabel="Add employee" onAdd={() => { setForm(emptyEmployee); setSelectedPhoto(null); setSelectedDocuments([]); setShowForm(true); }} search={search} setSearch={setSearch} searchPlaceholder="Search employee, email, title, department" filter={filter} setFilter={setFilter} filterOptions={[{ value: "ALL", label: "All departments" }, ...departmentOptions.map((item) => ({ value: item, label: item }))]} />
         <div className="overflow-x-auto">
           <table className="min-w-full text-left">
             <thead className="border-b border-line bg-slate-50/70">
@@ -781,7 +861,7 @@ export function LiveEmployeesPage() {
             </thead>
             <tbody>
               {filtered.map((employee) => (
-                <tr key={employee.id} className="border-b border-line transition hover:bg-soft/40">
+                <tr key={employee.id} onClick={() => setSelectedEmployee(employee)} className="cursor-pointer border-b border-line transition hover:bg-soft/40">
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-ink">{employee.fullName}</p>
                     <p className="mt-1 text-xs text-slate-500">{employee.email}</p>
@@ -792,8 +872,9 @@ export function LiveEmployeesPage() {
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{formatMoney(employee.salaryAmount)}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => { setForm({ ...emptyEmployee, id: employee.id, employeeNumber: employee.employeeNumber ?? "", fullName: employee.fullName, email: employee.email, phone: employee.phone ?? "", idPassportNumber: employee.idPassportNumber ?? "", dateOfBirth: employee.dateOfBirth?.slice(0, 10) ?? "", gender: employee.gender ?? "", address: employee.address ?? "", emergencyContactName: employee.emergencyContactName ?? "", emergencyContactPhone: employee.emergencyContactPhone ?? "", title: employee.title, department: employee.department ?? "", location: employee.location ?? "", managerName: employee.managerName ?? "", employmentStatus: employee.employmentStatus ?? "ACTIVE", employmentType: employee.employmentType ?? "FULL_TIME", startDate: employee.startDate?.slice(0, 10) ?? today, endDate: employee.endDate?.slice(0, 10) ?? "", salaryAmount: employee.salaryAmount?.toString() ?? "", bankName: employee.bankName ?? "", bankAccountHolder: employee.bankAccountHolder ?? "", bankAccountNumber: employee.bankAccountNumber ?? "", bankBranch: employee.bankBranch ?? "", bankAccountType: employee.bankAccountType ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
-                      <button onClick={() => setPendingDelete(employee.id)} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
+                      <button onClick={(event) => { event.stopPropagation(); setForm({ ...emptyEmployee, id: employee.id, employeeNumber: employee.employeeNumber ?? "", fullName: employee.fullName, email: employee.email, phone: employee.phone ?? "", idPassportNumber: employee.idPassportNumber ?? "", dateOfBirth: employee.dateOfBirth?.slice(0, 10) ?? "", gender: employee.gender ?? "", address: employee.address ?? "", emergencyContactName: employee.emergencyContactName ?? "", emergencyContactPhone: employee.emergencyContactPhone ?? "", title: employee.title, department: employee.department ?? "", location: employee.location ?? "", managerName: employee.managerName ?? "", employmentStatus: employee.employmentStatus ?? "ACTIVE", employmentType: employee.employmentType ?? "FULL_TIME", startDate: employee.startDate?.slice(0, 10) ?? today, endDate: employee.endDate?.slice(0, 10) ?? "", salaryAmount: employee.salaryAmount?.toString() ?? "", bankName: employee.bankName ?? "", bankAccountHolder: employee.bankAccountHolder ?? "", bankAccountNumber: employee.bankAccountNumber ?? "", bankBranch: employee.bankBranch ?? "", bankAccountType: employee.bankAccountType ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
+                      <button onClick={(event) => { event.stopPropagation(); void generateEmployeeQr(employee); }} className="rounded-xl border border-brand-200 px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition hover:bg-brand-50">QR code</button>
+                      <button onClick={(event) => { event.stopPropagation(); setPendingDelete(employee.id); }} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -803,7 +884,9 @@ export function LiveEmployeesPage() {
           </table>
         </div>
       </Card>
-      {showForm ? <EmployeeModal form={form} setForm={setForm} onClose={() => setShowForm(false)} onSave={() => void saveEmployee()} /> : null}
+      {showForm ? <EmployeeModal form={form} setForm={setForm} selectedPhoto={selectedPhoto} setSelectedPhoto={setSelectedPhoto} selectedDocuments={selectedDocuments} setSelectedDocuments={setSelectedDocuments} onClose={() => setShowForm(false)} onSave={() => void saveEmployee()} /> : null}
+      {employeeQr ? <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 px-4 py-8 backdrop-blur-sm"><div className="w-full max-w-md rounded-[28px] border border-line bg-white p-6 text-center shadow-[0_30px_80px_rgba(15,23,42,0.2)]"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-500">Employee attendance QR</p><h2 className="mt-2 text-2xl font-semibold text-ink">{employeeQr.employee.fullName}</h2><p className="mt-1 text-sm text-slate-500">Scan this code to open the secure employee clock-in page.</p><img src={employeeQr.qrDataUrl} alt={`Attendance QR for ${employeeQr.employee.fullName}`} className="mx-auto mt-5 h-64 w-64 rounded-2xl border border-line p-3" /><div className="mt-5 flex flex-wrap justify-center gap-2"><a href={employeeQr.qrDataUrl} download={`${employeeQr.employee.fullName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-attendance-qr.png`} className="rounded-2xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white">Download QR</a><button onClick={() => window.print()} className="rounded-2xl border border-line px-4 py-2.5 text-sm font-semibold text-slate-700">Print</button><button onClick={() => setEmployeeQr(null)} className="rounded-2xl border border-line px-4 py-2.5 text-sm font-semibold text-slate-700">Close</button></div></div></div> : null}
+      {selectedEmployee ? <EmployeeViewModal employee={selectedEmployee} documents={documents} attendance={attendance} onClose={() => setSelectedEmployee(null)} /> : null}
       {pendingDelete ? <DeleteModal title="Remove this employee?" onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteEmployee(pendingDelete)} confirmLabel="Delete Employee" /> : null}
       <HrToast toast={toast} />
     </div>
@@ -817,6 +900,7 @@ export function LiveLeavePage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyLeave);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -873,7 +957,7 @@ export function LiveLeavePage() {
             </thead>
             <tbody>
               {filtered.map((item) => (
-                <tr key={item.id} className="border-b border-line transition hover:bg-soft/40">
+                <tr key={item.id} onClick={() => setSelectedLeave(item)} className="cursor-pointer border-b border-line transition hover:bg-soft/40">
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-ink">{item.employee.fullName}</p>
                     <p className="mt-1 text-xs text-slate-500">{item.reason || "No reason"}</p>
@@ -883,8 +967,8 @@ export function LiveLeavePage() {
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{item.status}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => { setForm({ id: item.id, employeeId: item.employeeId, startDate: item.startDate.slice(0, 10), endDate: item.endDate.slice(0, 10), type: item.type, status: item.status, reason: item.reason ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
-                      <button onClick={() => setPendingDelete(item.id)} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
+                      <button onClick={(event) => { event.stopPropagation(); setForm({ id: item.id, employeeId: item.employeeId, startDate: item.startDate.slice(0, 10), endDate: item.endDate.slice(0, 10), type: item.type, status: item.status, reason: item.reason ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
+                      <button onClick={(event) => { event.stopPropagation(); setPendingDelete(item.id); }} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -895,6 +979,7 @@ export function LiveLeavePage() {
         </div>
       </Card>
       {showForm ? <LeaveModal form={form} setForm={setForm} employees={employees} onClose={() => setShowForm(false)} onSave={() => void saveLeave()} /> : null}
+      {selectedLeave ? <HrDetailModal title={`${selectedLeave.employee.fullName} · ${selectedLeave.type}`} subtitle="Leave request details" fields={[["Employee", selectedLeave.employee.fullName], ["Leave type", selectedLeave.type], ["Start date", formatDate(selectedLeave.startDate)], ["End date", formatDate(selectedLeave.endDate)], ["Status", selectedLeave.status], ["Reason", selectedLeave.reason || "Not provided"]]} onClose={() => setSelectedLeave(null)} /> : null}
       {pendingDelete ? <DeleteModal title="Remove this leave request?" onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteLeave(pendingDelete)} confirmLabel="Delete Leave" /> : null}
       <HrToast toast={toast} />
     </div>
@@ -908,6 +993,7 @@ export function LivePayrollPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyPayroll);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [selectedPayroll, setSelectedPayroll] = useState<PayrollRun | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -925,8 +1011,9 @@ export function LivePayrollPage() {
         periodLabel: form.periodLabel || undefined,
         payDate: toDateTime(form.payDate),
         grossAmount: form.grossAmount || "0",
-        deductions: form.deductions || "0",
-        netAmount: form.netAmount || undefined,
+        deductions: form.deductionItems.reduce((sum, item) => sum + (item.mode === "PERCENT" ? (Number(form.grossAmount) || 0) * (Number(item.value) || 0) / 100 : Number(item.value) || 0), 0).toFixed(2),
+        deductionItems: form.deductionItems.filter((item) => item.name.trim()).map((item) => ({ name: item.name, mode: item.mode, value: Number(item.value) || 0 })),
+        netAmount: Math.max(0, (Number(form.grossAmount) || 0) - form.deductionItems.reduce((sum, item) => sum + (item.mode === "PERCENT" ? (Number(form.grossAmount) || 0) * (Number(item.value) || 0) / 100 : Number(item.value) || 0), 0)).toFixed(2),
         status: form.status,
         notes: form.notes || "",
       };
@@ -956,6 +1043,16 @@ export function LivePayrollPage() {
     }
   }
 
+  async function downloadPayslip(item: PayrollRun) {
+    try {
+      const session = getStoredSession();
+      const response = await fetch(`${API_BASE_URL}/hr/payroll-runs/${item.id}/payslip`, { headers: { Authorization: `Bearer ${session?.token ?? ""}`, "X-Tenant-Id": session?.tenantId ?? "" } });
+      if (!response.ok) throw new Error(await response.text());
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a"); anchor.href = url; anchor.download = `payslip-${item.employee.fullName}-${item.periodLabel}.pdf`; anchor.click(); URL.revokeObjectURL(url);
+    } catch (error) { notify("error", error instanceof Error ? error.message : "Failed to download payslip."); }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
@@ -974,7 +1071,7 @@ export function LivePayrollPage() {
             </thead>
             <tbody>
               {filtered.map((item) => (
-                <tr key={item.id} className="border-b border-line transition hover:bg-soft/40">
+                <tr key={item.id} onClick={() => setSelectedPayroll(item)} className="cursor-pointer border-b border-line transition hover:bg-soft/40">
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-ink">{item.employee.fullName}</p>
                     <p className="mt-1 text-xs text-slate-500">{item.employee.title || "Employee"}</p>
@@ -985,8 +1082,9 @@ export function LivePayrollPage() {
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{item.status}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => { setForm({ id: item.id, employeeId: item.employeeId, periodLabel: item.periodLabel, payDate: item.payDate.slice(0, 10), grossAmount: String(item.grossAmount), deductions: String(item.deductions), netAmount: String(item.netAmount), status: item.status, notes: item.notes ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
-                      <button onClick={() => setPendingDelete(item.id)} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
+                      <button onClick={(event) => { event.stopPropagation(); void downloadPayslip(item); }} className="inline-flex items-center gap-1.5 rounded-xl border border-brand-200 px-2.5 py-1.5 text-xs font-semibold text-brand-600 transition hover:bg-brand-50"><Download className="h-3.5 w-3.5" /> Payslip</button>
+                      <button onClick={(event) => { event.stopPropagation(); setForm({ id: item.id, employeeId: item.employeeId, periodLabel: item.periodLabel, payDate: item.payDate.slice(0, 10), grossAmount: String(item.grossAmount), deductions: String(item.deductions), deductionsInput: String(item.deductions), deductionsMode: "AMOUNT", deductionItems: item.deductionItems?.map((deduction) => ({ id: deduction.id, name: deduction.name, mode: deduction.mode, value: String(deduction.value) })) ?? [{ name: "Total deductions", mode: "AMOUNT", value: String(item.deductions) }], netAmount: String(item.netAmount), status: item.status, notes: item.notes ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
+                      <button onClick={(event) => { event.stopPropagation(); setPendingDelete(item.id); }} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-soft">Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -997,8 +1095,44 @@ export function LivePayrollPage() {
         </div>
       </Card>
       {showForm ? <PayrollModal form={form} setForm={setForm} employees={employees} onClose={() => setShowForm(false)} onSave={() => void savePayroll()} /> : null}
+      {selectedPayroll ? <HrDetailModal title={`${selectedPayroll.employee.fullName} · ${selectedPayroll.periodLabel}`} subtitle="Payroll run details" fields={[["Employee", selectedPayroll.employee.fullName], ["Pay period", selectedPayroll.periodLabel], ["Pay date", formatDate(selectedPayroll.payDate)], ["Gross pay", formatMoney(selectedPayroll.grossAmount)], ["Deductions", formatMoney(selectedPayroll.deductions)], ["Net pay", formatMoney(selectedPayroll.netAmount)], ["Status", selectedPayroll.status], ["Notes", selectedPayroll.notes || "Not provided"]]} onClose={() => setSelectedPayroll(null)} /> : null}
       {pendingDelete ? <DeleteModal title="Remove this payroll run?" onCancel={() => setPendingDelete(null)} onConfirm={() => void deletePayroll(pendingDelete)} confirmLabel="Delete Payroll" /> : null}
       <HrToast toast={toast} />
+    </div>
+  );
+}
+
+export function LivePayslipsPage() {
+  const { payrollRuns, toast, notify } = useHrData();
+  const [search, setSearch] = useState("");
+  const [selectedPayslip, setSelectedPayslip] = useState<PayrollRun | null>(null);
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return payrollRuns.filter((item) => !term || `${item.employee.fullName} ${item.periodLabel} ${item.status}`.toLowerCase().includes(term));
+  }, [payrollRuns, search]);
+
+  async function downloadPayslip(item: PayrollRun) {
+    try {
+      const session = getStoredSession();
+      const response = await fetch(`${API_BASE_URL}/hr/payroll-runs/${item.id}/payslip`, { headers: { Authorization: `Bearer ${session?.token ?? ""}`, "X-Tenant-Id": session?.tenantId ?? "" } });
+      if (!response.ok) throw new Error(await response.text());
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a"); anchor.href = url; anchor.download = `payslip-${item.employee.fullName}-${item.periodLabel}.pdf`; anchor.click(); URL.revokeObjectURL(url);
+    } catch (error) { notify("error", error instanceof Error ? error.message : "Failed to download payslip."); }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="overflow-hidden">
+        <TableHeader label="Payslips" title="Employee payslips" description="Generate and download branded payslips from approved payroll records." count={filtered.length} search={search} setSearch={setSearch} searchPlaceholder="Search employee, period, status" />
+        <div className="border-b border-line bg-soft/30 px-5 py-4"><div className="grid gap-3 md:grid-cols-3"><div><p className="text-xs text-slate-500">Available records</p><p className="mt-1 text-xl font-semibold text-ink">{payrollRuns.length}</p></div><div><p className="text-xs text-slate-500">Approved or paid</p><p className="mt-1 text-xl font-semibold text-emerald-600">{payrollRuns.filter((item) => item.status === "APPROVED" || item.status === "PAID").length}</p></div><div><p className="text-xs text-slate-500">Total net payroll</p><p className="mt-1 text-xl font-semibold text-brand-500">{formatMoney(payrollRuns.reduce((sum, item) => sum + Number(item.netAmount), 0))}</p></div></div></div>
+        <div className="overflow-x-auto"><table className="min-w-full text-left"><thead className="border-b border-line bg-slate-50/70"><tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500"><th className="px-4 py-2.5 font-semibold">Employee</th><th className="px-4 py-2.5 font-semibold">Pay period</th><th className="px-4 py-2.5 font-semibold">Pay date</th><th className="px-4 py-2.5 font-semibold">Net pay</th><th className="px-4 py-2.5 font-semibold">Status</th><th className="px-4 py-2.5 text-right font-semibold">Action</th></tr></thead><tbody>
+          {filtered.map((item) => <tr key={item.id} onClick={() => setSelectedPayslip(item)} className="cursor-pointer border-b border-line transition hover:bg-soft/40"><td className="px-4 py-3"><p className="text-sm font-semibold text-ink">{item.employee.fullName}</p><p className="mt-1 text-xs text-slate-500">{item.employee.title || "Employee"}</p></td><td className="px-4 py-3 text-sm text-slate-600">{item.periodLabel}</td><td className="px-4 py-3 text-sm text-slate-600">{formatDate(item.payDate)}</td><td className="px-4 py-3 text-sm font-semibold text-brand-500">{formatMoney(item.netAmount)}</td><td className="px-4 py-3"><span className="rounded-full bg-soft px-2.5 py-1 text-[10px] font-semibold text-slate-700">{item.status}</span></td><td className="px-4 py-3 text-right"><button onClick={(event) => { event.stopPropagation(); void downloadPayslip(item); }} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600"><Download className="h-3.5 w-3.5" /> Download payslip</button></td></tr>)}
+          {filtered.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">No payslips match your search.</td></tr> : null}
+        </tbody></table></div>
+      </Card>
+      <HrToast toast={toast} />
+      {selectedPayslip ? <HrDetailModal title={`${selectedPayslip.employee.fullName} · ${selectedPayslip.periodLabel}`} subtitle="Payslip details" fields={[["Employee", selectedPayslip.employee.fullName], ["Pay period", selectedPayslip.periodLabel], ["Pay date", formatDate(selectedPayslip.payDate)], ["Gross pay", formatMoney(selectedPayslip.grossAmount)], ["Deductions", formatMoney(selectedPayslip.deductions)], ["Net pay", formatMoney(selectedPayslip.netAmount)], ["Status", selectedPayslip.status]]} onClose={() => setSelectedPayslip(null)} /> : null}
     </div>
   );
 }
@@ -1010,6 +1144,7 @@ export function LiveAttendancePage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyAttendance);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [selectedAttendance, setSelectedAttendance] = useState<AttendanceRecord | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -1073,7 +1208,7 @@ export function LiveAttendancePage() {
             </thead>
             <tbody>
               {filtered.map((item) => (
-                <tr key={item.id} className="border-b border-line transition hover:bg-soft/40">
+                <tr key={item.id} onClick={() => setSelectedAttendance(item)} className="cursor-pointer border-b border-line transition hover:bg-soft/40">
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-ink">{item.employee.fullName}</p>
                     <p className="mt-1 text-xs text-slate-500">{item.employee.department || "General"}</p>
@@ -1083,8 +1218,8 @@ export function LiveAttendancePage() {
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{fromIsoTime(item.checkInAt) || "--:--"} to {fromIsoTime(item.checkOutAt) || "--:--"}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => { setForm({ id: item.id, employeeId: item.employeeId, date: item.date.slice(0, 10), status: item.status, checkInAt: fromIsoTime(item.checkInAt), checkOutAt: fromIsoTime(item.checkOutAt), notes: item.notes ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
-                      <button onClick={() => setPendingDelete(item.id)} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
+                      <button onClick={(event) => { event.stopPropagation(); setForm({ id: item.id, employeeId: item.employeeId, date: item.date.slice(0, 10), status: item.status, checkInAt: fromIsoTime(item.checkInAt), checkOutAt: fromIsoTime(item.checkOutAt), notes: item.notes ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
+                      <button onClick={(event) => { event.stopPropagation(); setPendingDelete(item.id); }} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -1095,6 +1230,7 @@ export function LiveAttendancePage() {
         </div>
       </Card>
       {showForm ? <AttendanceModal form={form} setForm={setForm} employees={employees} onClose={() => setShowForm(false)} onSave={() => void saveAttendance()} /> : null}
+      {selectedAttendance ? <HrDetailModal title={`${selectedAttendance.employee.fullName} · ${formatDate(selectedAttendance.date)}`} subtitle="Attendance record details" fields={[["Employee", selectedAttendance.employee.fullName], ["Date", formatDate(selectedAttendance.date)], ["Status", selectedAttendance.status], ["Check in", fromIsoTime(selectedAttendance.checkInAt) || "Not recorded"], ["Check out", fromIsoTime(selectedAttendance.checkOutAt) || "Not recorded"], ["Notes", selectedAttendance.notes || "Not provided"]]} onClose={() => setSelectedAttendance(null)} /> : null}
       {pendingDelete ? <DeleteModal title="Remove this attendance entry?" onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteAttendance(pendingDelete)} confirmLabel="Delete Attendance" /> : null}
       <HrToast toast={toast} />
     </div>
@@ -1108,6 +1244,7 @@ export function LivePerformancePage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyReview);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [selectedReview, setSelectedReview] = useState<PerformanceReview | null>(null);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -1172,7 +1309,7 @@ export function LivePerformancePage() {
             </thead>
             <tbody>
               {filtered.map((item) => (
-                <tr key={item.id} className="border-b border-line transition hover:bg-soft/40">
+                <tr key={item.id} onClick={() => setSelectedReview(item)} className="cursor-pointer border-b border-line transition hover:bg-soft/40">
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-ink">{item.employee.fullName}</p>
                     <p className="mt-1 text-xs text-slate-500">{item.employee.title || "Employee"}</p>
@@ -1183,8 +1320,8 @@ export function LivePerformancePage() {
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{item.status}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => { setForm({ id: item.id, employeeId: item.employeeId, reviewDate: item.reviewDate.slice(0, 10), score: item.score?.toString() ?? "", reviewerName: item.reviewerName ?? "", status: item.status, summary: item.summary ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
-                      <button onClick={() => setPendingDelete(item.id)} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
+                      <button onClick={(event) => { event.stopPropagation(); setForm({ id: item.id, employeeId: item.employeeId, reviewDate: item.reviewDate.slice(0, 10), score: item.score?.toString() ?? "", reviewerName: item.reviewerName ?? "", status: item.status, summary: item.summary ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
+                      <button onClick={(event) => { event.stopPropagation(); setPendingDelete(item.id); }} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-soft">Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -1195,6 +1332,7 @@ export function LivePerformancePage() {
         </div>
       </Card>
       {showForm ? <ReviewModal form={form} setForm={setForm} employees={employees} onClose={() => setShowForm(false)} onSave={() => void saveReview()} /> : null}
+      {selectedReview ? <HrDetailModal title={`${selectedReview.employee.fullName} · Performance review`} subtitle="Performance review details" fields={[["Employee", selectedReview.employee.fullName], ["Review date", formatDate(selectedReview.reviewDate)], ["Reviewer", selectedReview.reviewerName || "Not provided"], ["Score", selectedReview.score ? `${selectedReview.score} / 5` : "Not scored"], ["Status", selectedReview.status], ["Summary", selectedReview.summary || "Not provided"]]} onClose={() => setSelectedReview(null)} /> : null}
       {pendingDelete ? <DeleteModal title="Remove this performance review?" onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteReview(pendingDelete)} confirmLabel="Delete Review" /> : null}
       <HrToast toast={toast} />
     </div>
@@ -1208,6 +1346,7 @@ export function LiveDocumentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyDocument);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<EmployeeDocument | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   const categories = useMemo(() => Array.from(new Set(documents.map((item) => item.category || "General"))).sort(), [documents]);
@@ -1278,7 +1417,7 @@ export function LiveDocumentsPage() {
             </thead>
             <tbody>
               {filtered.map((item) => (
-                <tr key={item.id} className="border-b border-line transition hover:bg-soft/40">
+                <tr key={item.id} onClick={() => setSelectedDocument(item)} className="cursor-pointer border-b border-line transition hover:bg-soft/40">
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-ink">{item.employee.fullName}</p>
                     <p className="mt-1 text-xs text-slate-500">{item.employee.department || "General"}</p>
@@ -1291,8 +1430,8 @@ export function LiveDocumentsPage() {
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{item.expiresAt ? formatDate(item.expiresAt) : "No expiry"}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => { setForm({ id: item.id, employeeId: item.employeeId, label: item.label, category: item.category ?? "", fileKey: item.fileKey, expiresAt: item.expiresAt?.slice(0, 10) ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
-                      <button onClick={() => setPendingDelete(item.id)} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50">Delete</button>
+                      <button onClick={(event) => { event.stopPropagation(); setForm({ id: item.id, employeeId: item.employeeId, label: item.label, category: item.category ?? "", fileKey: item.fileKey, expiresAt: item.expiresAt?.slice(0, 10) ?? "" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button>
+                      <button onClick={(event) => { event.stopPropagation(); setPendingDelete(item.id); }} className="rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-soft">Delete</button>
                     </div>
                   </td>
                 </tr>
@@ -1303,6 +1442,7 @@ export function LiveDocumentsPage() {
         </div>
       </Card>
       {showForm ? <DocumentModal form={form} setForm={setForm} employees={employees} selectedFile={selectedFile} setSelectedFile={setSelectedFile} onClose={() => setShowForm(false)} onSave={() => void saveDocument()} /> : null}
+      {selectedDocument ? <HrDetailModal title={selectedDocument.label} subtitle={`${selectedDocument.employee.fullName} · ${selectedDocument.category || "Employee document"}`} fields={[["Employee", selectedDocument.employee.fullName], ["Category", selectedDocument.category || "General"], ["File", selectedDocument.fileKey], ["Expires", selectedDocument.expiresAt ? formatDate(selectedDocument.expiresAt) : "No expiry"], ["Uploaded", formatDate(selectedDocument.createdAt)]]} onClose={() => setSelectedDocument(null)} /> : null}
       {pendingDelete ? <DeleteModal title="Remove this document?" onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteDocument(pendingDelete)} confirmLabel="Delete Document" /> : null}
       <HrToast toast={toast} />
     </div>

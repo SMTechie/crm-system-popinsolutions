@@ -26,11 +26,65 @@ type PermissionMember = {
     crm: string;
     accounting: string;
     hr: string;
-    forms: string;
-    automation: string;
+    attendance: string;
+    assets: string;
+    projects: string;
+    users: string;
     settings: string;
   };
 };
+
+const permissionModules = [
+  { key: "crm", label: "CRM" },
+  { key: "accounting", label: "Accounting" },
+  { key: "hr", label: "HR" },
+  { key: "attendance", label: "Attendance" },
+  { key: "assets", label: "Assets" },
+  { key: "projects", label: "Projects" },
+  { key: "users", label: "Users" },
+  { key: "settings", label: "Settings" },
+] as const;
+
+type PermissionModuleKey = (typeof permissionModules)[number]["key"];
+
+function permissionTone(level: string) {
+  if (level === "Full") return "bg-emerald-50 text-emerald-700";
+  if (level === "Edit") return "bg-blue-50 text-blue-700";
+  if (level === "Read" || level === "Self") return "bg-slate-100 text-slate-700";
+  return "bg-slate-50 text-slate-400";
+}
+
+function PermissionPill({ level }: { level: string }) {
+  return <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${permissionTone(level)}`}>{level}</span>;
+}
+
+function PermissionDetailModal({ member, onClose }: { member: PermissionMember; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/35 px-4 py-8 backdrop-blur-sm">
+      <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-line bg-white shadow-[0_30px_80px_rgba(15,23,42,0.2)]">
+        <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-500">Permission profile</p>
+            <h3 className="mt-1 text-2xl font-semibold text-ink">{member.fullName}</h3>
+            <p className="mt-1 text-sm text-slate-500">{member.email} · {member.role}</p>
+          </div>
+          <button onClick={onClose} className="rounded-full border border-line px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-soft">Close</button>
+        </div>
+        <div className="p-6">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {permissionModules.map((module) => {
+              const level = member.scope[module.key as PermissionModuleKey];
+              return <div key={module.key} className="flex items-center justify-between rounded-2xl border border-line bg-slate-50/60 px-4 py-3"><span className="text-sm font-medium text-slate-700">{module.label}</span><PermissionPill level={level} /></div>;
+            })}
+          </div>
+          <div className="mt-5 rounded-2xl bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500">
+            Full includes administration, Edit allows changes, Read is view-only, Self is limited to the user&apos;s own records, and None removes access.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type SettingsPayload = {
   tenant: {
@@ -110,8 +164,6 @@ const saasModules = [
   { key: "crm", label: "CRM", description: "Contacts, companies, deals, activities, tasks, notes, pipeline" },
   { key: "accounting", label: "Accounting", description: "Quotes, invoices, expenses, payments, reports, vendors" },
   { key: "hr", label: "HR", description: "Employees, leave, payroll, attendance, reviews, documents" },
-  { key: "forms", label: "Form Builder", description: "Templates, responses, public links, embedded forms" },
-  { key: "automation", label: "Automation", description: "Triggers, actions, workflows, logs" },
   { key: "settings", label: "Settings", description: "Tenant admin and workspace controls" },
 ] as const;
 
@@ -368,7 +420,7 @@ function TeamModal({
         <Input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" />
         <Input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="Email address" />
         <Select value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))}>
-          {["OWNER", "ADMIN", "SALES_MANAGER", "ACCOUNTANT", "HR_MANAGER", "AGENT", "EMPLOYEE"].map((role) => (
+          {["OWNER", "ADMIN", "SALES_MANAGER", "ACCOUNTANT", "HR_MANAGER", "PROJECT_MANAGER", "IT_MANAGER", "AGENT", "EMPLOYEE", "VIEWER"].map((role) => (
             <option key={role} value={role}>
               {role}
             </option>
@@ -480,7 +532,8 @@ export function LiveWorkspaceSettingsPage() {
     allowLocalAuth: true,
     sessionTimeoutMinutes: "480",
   });
-  const [enabledModules, setEnabledModules] = useState<string[]>(["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"]);
+  const [enabledModules, setEnabledModules] = useState<string[]>(["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"]);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   useEffect(() => {
     if (!data) return;
@@ -565,9 +618,53 @@ export function LiveWorkspaceSettingsPage() {
     }
   }
 
+  async function uploadLogo(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      notify("error", "Please choose an image file.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      notify("error", "Logo files must be smaller than 2 MB.");
+      return;
+    }
+
+    try {
+      setLogoUploading(true);
+      const payload = new FormData();
+      payload.append("logo", file);
+      const result = await apiFetch<{ logoUrl: string }>("/settings/logo", { method: "POST", body: payload });
+      setForm((current) => ({ ...current, logoUrl: result.logoUrl }));
+      notify("success", "Logo uploaded successfully.");
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Logo upload failed.");
+    } finally {
+      setLogoUploading(false);
+      event.target.value = "";
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <Card className="p-6">
+      <Card className="overflow-hidden">
+        <div className="border-b border-line bg-gradient-to-r from-slate-50 via-white to-brand-50/40 px-6 py-5">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-500">Workspace configuration</p>
+              <h2 className="mt-1 text-xl font-semibold tracking-[-0.03em] text-ink">Workspace identity and defaults</h2>
+              <p className="mt-1 text-sm text-slate-500">Manage the details your team sees across the platform.</p>
+            </div>
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-line bg-white text-sm font-semibold text-brand-600 shadow-sm">
+              {form.logoUrl ? <img src={form.logoUrl} alt="Workspace logo preview" className="h-full w-full object-cover" /> : "POP"}
+            </div>
+          </div>
+        </div>
+        <div className="p-6">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-ink">General information</h3>
+          <p className="mt-1 text-xs text-slate-500">Set the workspace name, contact details, and public identity.</p>
+        </div>
         <div className="grid gap-3 md:grid-cols-2">
           <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Workspace name" />
           <Input value={form.supportEmail} onChange={(event) => setForm((current) => ({ ...current, supportEmail: event.target.value }))} placeholder="Support email" />
@@ -578,7 +675,19 @@ export function LiveWorkspaceSettingsPage() {
           <Input value={form.emailFromName} onChange={(event) => setForm((current) => ({ ...current, emailFromName: event.target.value }))} placeholder="Email from name" />
           <Input value={form.emailFromAddress} onChange={(event) => setForm((current) => ({ ...current, emailFromAddress: event.target.value }))} placeholder="Email from address" />
           <Input value={form.replyToEmail} onChange={(event) => setForm((current) => ({ ...current, replyToEmail: event.target.value }))} placeholder="Reply-to email" />
-          <Input value={form.logoUrl} onChange={(event) => setForm((current) => ({ ...current, logoUrl: event.target.value }))} placeholder="Logo URL" />
+          <div className="flex items-center gap-3 rounded-2xl border border-line bg-slate-50/50 px-3 py-2">
+            <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl border border-line bg-white text-[10px] font-semibold text-brand-600">
+              {form.logoUrl ? <img src={form.logoUrl} alt="Current workspace logo" className="h-full w-full object-cover" /> : "LOGO"}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-ink">Workspace logo</p>
+              <p className="truncate text-[11px] text-slate-500">PNG, JPG, SVG or WEBP · max 2 MB</p>
+            </div>
+            <label className="cursor-pointer rounded-xl bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-600">
+              {logoUploading ? "Uploading..." : "Upload"}
+              <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" onChange={uploadLogo} disabled={logoUploading} className="sr-only" />
+            </label>
+          </div>
           <Input value={form.addressLine1} onChange={(event) => setForm((current) => ({ ...current, addressLine1: event.target.value }))} placeholder="Address line" className="md:col-span-2" />
           <Input value={form.city} onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))} placeholder="City" />
           <Input value={form.country} onChange={(event) => setForm((current) => ({ ...current, country: event.target.value }))} placeholder="Country" />
@@ -593,6 +702,10 @@ export function LiveWorkspaceSettingsPage() {
           </Select>
           <Input value={form.sessionTimeoutMinutes} onChange={(event) => setForm((current) => ({ ...current, sessionTimeoutMinutes: event.target.value }))} placeholder="Session timeout minutes" />
         </div>
+        <div className="mt-6 mb-3">
+          <h3 className="text-sm font-semibold text-ink">Security and access</h3>
+          <p className="mt-1 text-xs text-slate-500">Control authentication requirements and session behaviour.</p>
+        </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="flex items-center justify-between rounded-2xl border border-line px-4 py-3 text-sm text-slate-700">
             Require MFA
@@ -603,7 +716,7 @@ export function LiveWorkspaceSettingsPage() {
             <input type="checkbox" checked={form.allowLocalAuth} onChange={(event) => setForm((current) => ({ ...current, allowLocalAuth: event.target.checked }))} className="h-4 w-4 accent-[#365CF5]" />
           </label>
         </div>
-        <div className="mt-4">
+        <div className="mt-6 border-t border-line pt-6">
           <div className="mb-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Module subscriptions</p>
             <p className="mt-1 text-xs text-slate-500">Choose which modules this tenant can access. Settings stays enabled so the workspace always remains manageable.</p>
@@ -626,9 +739,13 @@ export function LiveWorkspaceSettingsPage() {
             })}
           </div>
         </div>
-        <button onClick={() => void saveWorkspace()} className="mt-5 rounded-2xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white">
+        <div className="mt-6 flex items-center justify-between gap-4 border-t border-line pt-5">
+          <p className="hidden text-xs text-slate-500 sm:block">Changes apply across the workspace after saving.</p>
+        <button onClick={() => void saveWorkspace()} className="rounded-2xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(54,92,245,0.2)] transition hover:bg-brand-600">
           Save Workspace
         </button>
+        </div>
+        </div>
       </Card>
       <SettingsToast toast={toast} />
     </div>
@@ -1158,6 +1275,7 @@ export function LiveSecuritySettingsPage() {
 export function LivePermissionsSettingsPage() {
   const { data, toast } = useSettingsData();
   const [search, setSearch] = useState("");
+  const [selectedMember, setSelectedMember] = useState<PermissionMember | null>(null);
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return (data?.permissions ?? []).filter(
@@ -1175,7 +1293,7 @@ export function LivePermissionsSettingsPage() {
         <TableHeader
           label="Permissions"
           title="Role access matrix"
-          description="Review module-level access implied by each team member role across CRM, accounting, HR, forms, automation, and settings."
+          description="Review the access granted to each team member across the active CRM, finance, HR, operations, and administration modules. Select a row for the full access profile."
           count={filtered.length}
           search={search}
           setSearch={setSearch}
@@ -1187,33 +1305,23 @@ export function LivePermissionsSettingsPage() {
               <tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
                 <th className="px-4 py-2.5 font-semibold">User</th>
                 <th className="px-4 py-2.5 font-semibold">Role</th>
-                <th className="px-4 py-2.5 font-semibold">CRM</th>
-                <th className="px-4 py-2.5 font-semibold">Accounting</th>
-                <th className="px-4 py-2.5 font-semibold">HR</th>
-                <th className="px-4 py-2.5 font-semibold">Forms</th>
-                <th className="px-4 py-2.5 font-semibold">Automation</th>
-                <th className="px-4 py-2.5 font-semibold">Settings</th>
+                {permissionModules.map((module) => <th key={module.key} className="px-4 py-2.5 font-semibold">{module.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {filtered.map((member) => (
-                <tr key={member.id} className="border-b border-line transition hover:bg-soft/40">
+                <tr key={member.id} onClick={() => setSelectedMember(member)} className="cursor-pointer border-b border-line transition hover:bg-soft/40">
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-ink">{member.fullName}</p>
                     <p className="mt-1 text-xs text-slate-500">{member.email}</p>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{member.role}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{member.scope.crm}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{member.scope.accounting}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{member.scope.hr}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{member.scope.forms}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{member.scope.automation}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{member.scope.settings}</td>
+                  {permissionModules.map((module) => <td key={module.key} className="px-4 py-3"><PermissionPill level={member.scope[module.key as PermissionModuleKey]} /></td>)}
                 </tr>
               ))}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={permissionModules.length + 2} className="px-4 py-8 text-center text-sm text-slate-500">
                     No permission rows match the current search.
                   </td>
                 </tr>
@@ -1221,7 +1329,12 @@ export function LivePermissionsSettingsPage() {
             </tbody>
           </table>
         </div>
+        <div className="flex flex-wrap items-center gap-3 border-t border-line bg-slate-50/60 px-4 py-3 text-xs text-slate-500">
+          <span className="font-semibold text-slate-700">Access levels:</span>
+          {["Full", "Edit", "Read", "Self", "None"].map((level) => <span key={level} className="inline-flex items-center gap-1.5"><PermissionPill level={level} /></span>)}
+        </div>
       </Card>
+      {selectedMember ? <PermissionDetailModal member={selectedMember} onClose={() => setSelectedMember(null)} /> : null}
       <SettingsToast toast={toast} />
     </div>
   );

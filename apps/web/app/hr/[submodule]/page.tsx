@@ -7,6 +7,7 @@ import {
   LiveHr,
   LiveLeavePage,
   LivePayrollPage,
+  LivePayslipsPage,
   LivePerformancePage,
 } from "@/components/modules/live-hr";
 
@@ -22,6 +23,10 @@ const hrSubmodules: Record<string, { title: string; description: string }> = {
   payroll: {
     title: "HR Payroll",
     description: "Prepare compensation records, payroll-related data, and workforce administration.",
+  },
+  payslips: {
+    title: "HR Payslips",
+    description: "Generate and download branded employee payslips from payroll records.",
   },
   attendance: {
     title: "HR Attendance",
@@ -49,6 +54,7 @@ export default async function HrSubmodulePage({ params }: { params: Promise<{ su
     employees: <LiveEmployeesPage />,
     leave: <LiveLeavePage />,
     payroll: <LivePayrollPage />,
+    payslips: <LivePayslipsPage />,
     attendance: <LiveAttendancePage />,
     performance: <LivePerformancePage />,
     documents: <LiveDocumentsPage />,

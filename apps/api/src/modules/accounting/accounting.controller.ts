@@ -63,6 +63,7 @@ export class AccountingController {
     if (!lines?.length) return null;
     const items = lines.map((line) => {
       if (!line.description?.trim() || !line.quantity || line.quantity <= 0 || line.unitPrice === undefined || line.unitPrice < 0) throw new BadRequestException("Every line item needs a description, positive quantity, and non-negative price.");
+      if ((line.discount ?? 0) < 0 || (line.taxRate ?? 0) < 0 || (line.discount ?? 0) > line.quantity * line.unitPrice) throw new BadRequestException("Discounts and tax rates must be non-negative, and a discount cannot exceed the line value.");
       const net = line.quantity * line.unitPrice - (line.discount ?? 0);
       const tax = net * (line.taxRate ?? 0) / 100;
       return { description: line.description.trim(), quantity: new Prisma.Decimal(line.quantity), unitPrice: new Prisma.Decimal(line.unitPrice), discount: new Prisma.Decimal(line.discount ?? 0), taxRate: new Prisma.Decimal(line.taxRate ?? 0), lineTotal: new Prisma.Decimal(net.toFixed(2)), tax };
@@ -116,7 +117,7 @@ export class AccountingController {
   async invoices(@Tenant() tenantId: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
     const pagination = this.pagination(page, pageSize); const where = { tenantId: tenant.id };
-    const [items, total] = await Promise.all([this.prisma.invoice.findMany({ where, include: { payments: true, contact: true, company: true }, orderBy: { issuedAt: "desc" }, skip: pagination.skip, take: pagination.take }), this.prisma.invoice.count({ where })]);
+    const [items, total] = await Promise.all([this.prisma.invoice.findMany({ where, include: { payments: true, contact: true, company: true, items: true }, orderBy: { issuedAt: "desc" }, skip: pagination.skip, take: pagination.take }), this.prisma.invoice.count({ where })]);
     return { tenantId: tenant.slug, items, meta: { page: pagination.page, pageSize: pagination.pageSize, total, pageCount: Math.ceil(total / pagination.pageSize) } };
   }
 
@@ -989,6 +990,7 @@ export class AccountingController {
       status?: string;
       issuedAt?: string;
       dueAt?: string;
+      lineItems?: Array<{ description?: string; quantity?: number; unitPrice?: number; discount?: number; taxRate?: number }>;
     },
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
@@ -998,15 +1000,17 @@ export class AccountingController {
     if (!existing) {
       return { status: "missing", invoiceId };
     }
-    if (existing.status !== "DRAFT" && (body.subtotal !== undefined || body.taxAmount !== undefined || body.currency !== undefined)) {
+    if (existing.status !== "DRAFT" && (body.subtotal !== undefined || body.taxAmount !== undefined || body.lineItems !== undefined || body.currency !== undefined)) {
       throw new BadRequestException("Posted invoices cannot have their financial values edited; use a credit note or reversal instead.");
     }
     if (existing.status !== "DRAFT" && body.status && this.normalizeStatus(body.status) === "DRAFT") {
       throw new BadRequestException("Posted invoices cannot be moved back to draft.");
     }
 
-    const subtotal = body.subtotal ?? Number(existing.subtotal);
-    const taxAmount = body.taxAmount ?? Number(existing.taxAmount);
+    const calculated = body.lineItems === undefined ? null : this.calculateLineItems(body.lineItems);
+    if (body.lineItems !== undefined && !calculated) throw new BadRequestException("At least one invoice line item is required.");
+    const subtotal = calculated?.subtotal ? Number(calculated.subtotal) : body.subtotal ?? Number(existing.subtotal);
+    const taxAmount = calculated?.taxAmount ? Number(calculated.taxAmount) : body.taxAmount ?? Number(existing.taxAmount);
     let contactId: string | null | undefined;
     if (body.contactId === undefined) {
       contactId = undefined;
@@ -1042,16 +1046,17 @@ export class AccountingController {
         notes: body.notes === "" ? null : body.notes ?? undefined,
         status: body.status ? this.normalizeStatus(body.status) : undefined,
         currency: body.currency ?? undefined,
-        subtotal: body.subtotal === undefined ? undefined : new Prisma.Decimal(subtotal),
-        taxAmount: body.taxAmount === undefined ? undefined : new Prisma.Decimal(taxAmount),
+        subtotal: calculated || body.subtotal !== undefined ? new Prisma.Decimal(subtotal) : undefined,
+        taxAmount: calculated || body.taxAmount !== undefined ? new Prisma.Decimal(taxAmount) : undefined,
         total:
-          body.subtotal === undefined && body.taxAmount === undefined
+          !calculated && body.subtotal === undefined && body.taxAmount === undefined
             ? undefined
             : new Prisma.Decimal(subtotal + taxAmount),
+        ...(calculated ? { items: { deleteMany: {}, create: calculated.items.map(({ tax, ...item }) => item) } } : {}),
         issuedAt: body.issuedAt ? new Date(body.issuedAt) : undefined,
         dueAt: body.dueAt ? new Date(body.dueAt) : undefined,
       },
-      include: { contact: true, company: true, payments: true },
+      include: { contact: true, company: true, payments: true, items: true },
     });
     if (item.status === "VOID" && existing.status !== "VOID") {
       await this.posting.reverseInvoice(tenant.id, item);
@@ -1085,14 +1090,14 @@ export class AccountingController {
     } else if (report === "cash-flow") {
       const [payments, expenses] = await Promise.all([
         this.prisma.payment.findMany({ where: { invoice: { tenantId: tenant.id }, receivedAt: range }, select: { amount: true } }),
-        this.prisma.expense.findMany({ where: { tenantId: tenant.id, status: { in: ["APPROVED", "PAID"] }, incurredAt: range }, select: { amount: true } }),
+        this.prisma.expense.findMany({ where: { tenantId: tenant.id, status: { in: ["APPROVED", "PAID"] }, incurredAt: range }, select: { amount: true, taxAmount: true } }),
       ]);
       const inflow = payments.reduce((sum, item) => sum + Number(item.amount), 0); const outflow = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
       rows = [{ label: "Cash inflow", value: inflow.toFixed(2) }, { label: "Cash outflow", value: outflow.toFixed(2) }, { label: "Net cash flow", value: (inflow - outflow).toFixed(2) }];
     } else if (report === "vat") {
       const [invoices, expenses] = await Promise.all([
         this.prisma.invoice.findMany({ where: { tenantId: tenant.id, status: { not: "VOID" }, issuedAt: range }, select: { subtotal: true, taxAmount: true } }),
-        this.prisma.expense.findMany({ where: { tenantId: tenant.id, status: { in: ["APPROVED", "PAID"] }, incurredAt: range }, select: { amount: true } }),
+        this.prisma.expense.findMany({ where: { tenantId: tenant.id, status: { in: ["APPROVED", "PAID"] }, incurredAt: range }, select: { amount: true, taxAmount: true } }),
       ]);
       const outputBase = invoices.reduce((sum, item) => sum + Number(item.subtotal), 0); const outputTax = invoices.reduce((sum, item) => sum + Number(item.taxAmount), 0); const inputBase = expenses.reduce((sum, item) => sum + Number(item.amount), 0); const inputTax = expenses.reduce((sum, item) => sum + Number(item.taxAmount), 0);
       rows = [{ label: "Output base", value: outputBase.toFixed(2) }, { label: "Output VAT", value: outputTax.toFixed(2) }, { label: "Input base", value: inputBase.toFixed(2) }, { label: "Input VAT", value: inputTax.toFixed(2) }, { label: "Net VAT", value: (outputTax - inputTax).toFixed(2) }];
@@ -1148,12 +1153,22 @@ export class AccountingController {
       include: { items: true },
     });
     if (!invoice) throw new BadRequestException("Invoice not found.");
+    let logoBuffer: Buffer | null = null;
+    if (tenant.logoUrl) {
+      try {
+        const logoResponse = await fetch(tenant.logoUrl);
+        if (logoResponse.ok) logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
+      } catch {
+        logoBuffer = null;
+      }
+    }
     const chunks: Buffer[] = [];
     const document = new PDFDocument({ size: "A4", margin: 50 });
     document.on("data", (chunk: Buffer) => chunks.push(chunk));
     await new Promise<void>((resolve, reject) => {
       document.on("end", resolve);
       document.on("error", reject);
+      if (logoBuffer) document.image(logoBuffer, 50, 45, { fit: [90, 60] });
       document.fontSize(22).text(tenant.name, { align: "right" });
       document.moveDown().fontSize(18).text(`Invoice ${invoice.number}`);
       document.fontSize(10).text(`Issued: ${invoice.issuedAt.toISOString().slice(0, 10)}    Due: ${invoice.dueAt.toISOString().slice(0, 10)}`);
@@ -1213,6 +1228,7 @@ export class AccountingController {
       vendor?: string | null;
       currency?: string;
       amount?: number;
+      taxAmount?: number;
       incurredAt?: string;
       invoiceId?: string | null;
       departmentId?: string | null;

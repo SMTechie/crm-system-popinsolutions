@@ -2,27 +2,58 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, X } from "lucide-react";
+import { ArrowRight, Clock3, MapPin, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { type ModuleCard } from "@/lib/data";
 import { filterModuleCards } from "@/lib/modules";
 import { getStoredSession } from "@/lib/session";
 import { apiFetch } from "@/lib/api";
 
-type DashboardOverview = { financial: { revenue: number; expenses: number; netIncome: number; outstandingInvoices: number }; crm: { customers: number; leads: number }; hr: { employees: number; attendanceToday: number }; assets: { total: number }; projects: { active: number; openTasks: number } };
+type AttendanceToday = { id: string; date: string; status: string; checkInAt?: string | null; checkOutAt?: string | null; location?: string | null };
 
 export function DashboardGrid() {
   const [activeModule, setActiveModule] = useState<ModuleCard | null>(null);
   const [availableModules, setAvailableModules] = useState<ModuleCard[]>([]);
-  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [todayAttendance, setTodayAttendance] = useState<AttendanceToday | null>(null);
+  const [attendanceMessage, setAttendanceMessage] = useState("");
+  const [attendanceBusy, setAttendanceBusy] = useState(false);
 
   useEffect(() => {
     const session = getStoredSession();
     setAvailableModules(
-      filterModuleCards(session?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"]),
+      filterModuleCards(session?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"]),
     );
-    void apiFetch<DashboardOverview>("/dashboard/overview").then(setOverview).catch(() => setOverview(null));
+    void apiFetch<{ items: AttendanceToday[] }>("/attendance/history").then((result) => {
+      const today = new Date().toDateString();
+      setTodayAttendance(result.items.find((item) => new Date(item.date).toDateString() === today) ?? null);
+    }).catch(() => setTodayAttendance(null));
   }, []);
+
+  async function getLocation() {
+    if (!navigator.geolocation) throw new Error("Location permission is required to record attendance.");
+    return new Promise<string>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => resolve(`${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`),
+        () => reject(new Error("Please enable location permission before clocking in or out.")),
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 },
+      );
+    });
+  }
+
+  async function attendanceAction(action: "in" | "out") {
+    setAttendanceBusy(true);
+    setAttendanceMessage("");
+    try {
+      const location = await getLocation();
+      const result = await apiFetch<{ item: AttendanceToday }>(`/attendance/clock-${action === "in" ? "in" : "out"}`, { method: "POST", body: JSON.stringify({ method: "WEB", location }) });
+      setTodayAttendance(result.item);
+      setAttendanceMessage(action === "in" ? "Clocked in successfully." : "Clocked out successfully.");
+    } catch (error) {
+      setAttendanceMessage(error instanceof Error ? error.message : "Attendance action failed.");
+    } finally {
+      setAttendanceBusy(false);
+    }
+  }
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -37,13 +68,18 @@ export function DashboardGrid() {
 
   return (
     <>
-      {overview ? <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric label="Revenue" value={`R${overview.financial.revenue.toLocaleString()}`} /><Metric label="Outstanding" value={`R${overview.financial.outstandingInvoices.toLocaleString()}`} /><Metric label="Employees" value={String(overview.hr.employees)} /><Metric label="Open tasks" value={String(overview.projects.openTasks)} /></section> : null}
-      <section className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-4">
+      <Card className="mb-5 border-brand-100 bg-gradient-to-r from-brand-50/70 via-white to-white p-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-start gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-brand-500 text-white"><Clock3 className="h-5 w-5" /></div><div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-600">Employee attendance</p><h2 className="mt-1 text-lg font-semibold text-ink">{todayAttendance?.checkInAt && !todayAttendance.checkOutAt ? "You are clocked in" : "Ready to clock in"}</h2><p className="mt-1 text-xs text-slate-500">Time is captured automatically. Location is requested from your device.</p>{attendanceMessage ? <p className="mt-2 text-xs font-semibold text-brand-600">{attendanceMessage}</p> : null}</div></div>
+          <div className="flex flex-wrap items-center gap-2"><span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-2 text-xs text-slate-500"><MapPin className="h-3.5 w-3.5" />{todayAttendance?.location || "Location will be captured"}</span>{todayAttendance?.checkInAt && !todayAttendance.checkOutAt ? <button disabled={attendanceBusy} onClick={() => void attendanceAction("out")} className="rounded-2xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{attendanceBusy ? "Saving…" : "Clock out"}</button> : <button disabled={attendanceBusy} onClick={() => void attendanceAction("in")} className="rounded-2xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{attendanceBusy ? "Saving…" : "Clock in"}</button>}</div>
+        </div>
+      </Card>
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {availableModules.map((card) => {
           const Icon = card.icon;
           return (
             <button key={card.title} onClick={() => setActiveModule(card)} className="text-left">
-              <Card className="group h-full min-h-[116px] w-full p-3 transition duration-200 hover:-translate-y-1 hover:border-brand-100 hover:bg-[#fbfcff] hover:shadow-[0_12px_24px_rgba(46,90,232,0.10)]">
+              <Card className={`group h-full min-h-[116px] w-full border-transparent p-3 transition duration-200 hover:-translate-y-1 hover:border-brand-100 hover:bg-[#fbfcff] hover:shadow-[0_12px_24px_rgba(46,90,232,0.10)] ${moduleCardTone(card.title)}`}>
                 <div className={`grid h-8 w-8 place-items-center rounded-[14px] transition duration-200 group-hover:scale-[1.04] ${card.tint}`}>
                   <Icon className="h-3.5 w-3.5" />
                 </div>
@@ -91,7 +127,7 @@ export function DashboardGrid() {
                 const Icon = submodule.icon;
                 return (
                   <Link
-                    key={submodule.href}
+                    key={`${activeModule.title}-${submodule.title}`}
                     href={submodule.href}
                     onClick={() => setActiveModule(null)}
                     className="group rounded-[20px] border border-line bg-white px-3.5 py-3.5 transition hover:-translate-y-0.5 hover:border-brand-100 hover:bg-soft"
@@ -119,4 +155,16 @@ export function DashboardGrid() {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) { return <Card className="p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{label}</p><p className="mt-2 text-2xl font-semibold text-ink">{value}</p></Card>; }
+function moduleCardTone(title: string) {
+  const tones: Record<string, string> = {
+    CRM: "bg-gradient-to-br from-cyan-50/70 to-white",
+    Accounting: "bg-gradient-to-br from-emerald-50/70 to-white",
+    HR: "bg-gradient-to-br from-rose-50/70 to-white",
+    Attendance: "bg-gradient-to-br from-amber-50/70 to-white",
+    Assets: "bg-gradient-to-br from-indigo-50/70 to-white",
+    Projects: "bg-gradient-to-br from-violet-50/70 to-white",
+    Users: "bg-gradient-to-br from-sky-50/70 to-white",
+    Settings: "bg-gradient-to-br from-slate-50 to-white",
+  };
+  return tones[title] ?? "bg-white";
+}

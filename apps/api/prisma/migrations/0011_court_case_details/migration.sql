@@ -1,0 +1,6 @@
+ALTER TABLE "Deal"
+ADD COLUMN "caseType" TEXT NOT NULL DEFAULT 'COURT',
+ADD COLUMN "caseNumber" TEXT,
+ADD COLUMN "courtName" TEXT,
+ADD COLUMN "nextHearingDate" TIMESTAMP(3),
+ADD COLUMN "caseNotes" TEXT;

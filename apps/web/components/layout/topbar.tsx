@@ -6,15 +6,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   ChevronDown,
-  FolderKanban,
-  LayoutGrid,
   LogOut,
   MoonStar,
-  PanelTop,
-  Plus,
   Settings2,
-  ShieldCheck,
-  Users2,
 } from "lucide-react";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { moduleCards } from "@/lib/data";
@@ -33,7 +27,6 @@ type NotificationItem = {
   detail: string;
   href: string;
 };
-type SearchResult = { type: string; id: string; label: string; detail?: string };
 
 const THEME_KEY = "popin-theme";
 
@@ -42,32 +35,20 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
   const router = useRouter();
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [quickOpen, setQuickOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [workspaceLogo, setWorkspaceLogo] = useState<string | null>(null);
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationStatus, setNotificationStatus] = useState("Loading activity...");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
-  const quickRef = useRef<HTMLDivElement | null>(null);
   const profileRef = useRef<HTMLDivElement | null>(null);
   const submenuRef = useRef<HTMLDivElement | null>(null);
-  const searchRef = useRef<HTMLInputElement | null>(null);
 
   function signOut() {
     if (user?.refreshToken) void fetch(`${API_BASE_URL}/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${user.refreshToken}` } }).catch(() => undefined);
     clearSession();
     router.replace("/login");
   }
-
-  useEffect(() => {
-    function handleSearchShortcut(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); searchRef.current?.focus(); }
-    }
-    window.addEventListener("keydown", handleSearchShortcut);
-    return () => window.removeEventListener("keydown", handleSearchShortcut);
-  }, []);
 
   useEffect(() => {
     const storedTheme =
@@ -78,20 +59,17 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
   }, []);
 
   useEffect(() => {
-    if (!searchQuery.trim()) { setSearchResults([]); return; }
-    const controller = new AbortController();
-    void apiFetch<{ items: SearchResult[] }>(`/search?q=${encodeURIComponent(searchQuery.trim())}`, { signal: controller.signal }).then((result) => setSearchResults(result.items)).catch((error: unknown) => { if ((error as { name?: string }).name !== "AbortError") setSearchResults([]); });
-    return () => controller.abort();
-  }, [searchQuery]);
+    if (!user?.token) return;
+    void apiFetch<{ tenant: { logoUrl?: string | null } }>("/settings")
+      .then((result) => setWorkspaceLogo(result.tenant.logoUrl ?? null))
+      .catch(() => setWorkspaceLogo(null));
+  }, [user?.token]);
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
       const target = event.target as Node;
       if (notificationsRef.current && !notificationsRef.current.contains(target)) {
         setNotificationsOpen(false);
-      }
-      if (quickRef.current && !quickRef.current.contains(target)) {
-        setQuickOpen(false);
       }
       if (profileRef.current && !profileRef.current.contains(target)) {
         setProfileOpen(false);
@@ -107,7 +85,6 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
 
   useEffect(() => {
     setNotificationsOpen(false);
-    setQuickOpen(false);
     setProfileOpen(false);
     setSubmenuOpen(false);
   }, [pathname]);
@@ -122,7 +99,7 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
 
       try {
         const items: NotificationItem[] = [];
-        const enabledModules = user.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"];
+        const enabledModules = user.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"];
         const requests: Array<Promise<void>> = [];
 
         if (enabledModules.includes("crm")) {
@@ -202,7 +179,7 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
   }
 
   const enabledModuleCards = useMemo(
-    () => filterModuleCards(user?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"]),
+    () => filterModuleCards(user?.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"]),
     [user?.enabledModules],
   );
   const enabledNavItems = useMemo(
@@ -219,34 +196,19 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
   const activeModule = enabledModuleCards.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   const breadcrumbSubmodule = activeModule?.submodules.find((item) => pathname === item.href) ?? null;
 
-  const quickActions = useMemo(
-    () => [
-      { href: "/crm", label: "Open CRM", icon: Users2 },
-      { href: "/accounting", label: "New Invoice", icon: LayoutGrid },
-      { href: "/forms/builder", label: "Build Form", icon: FolderKanban },
-      { href: "/hr", label: "Review Leave", icon: ShieldCheck },
-    ],
-    [],
-  );
-  const visibleQuickActions = quickActions.filter((item) =>
-    item.href === "/settings" || enabledModuleCards.some((card) => item.href === card.href || item.href.startsWith(card.href)),
-  );
-
   return (
     <header className="theme-header sticky top-0 z-20 border-b border-line bg-white/90 backdrop-blur transition-colors">
       <div className="mx-auto max-w-[1600px] px-6 py-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-4">
-            <div className="theme-surface theme-text grid h-11 w-11 place-items-center rounded-full border border-line bg-white text-xs font-semibold text-ink">
-              POP
+            <div className="theme-surface theme-text grid h-11 w-11 place-items-center overflow-hidden rounded-full border border-line bg-white text-xs font-semibold text-ink">
+              {workspaceLogo ? <img src={workspaceLogo} alt="Workspace logo" className="h-full w-full object-cover" /> : "POP"}
             </div>
             <div>
               <p className="theme-text text-xl font-semibold text-ink">{user?.tenantName ?? "Pop In Solutions"}</p>
-              <p className="theme-subtext text-sm text-slate-500">Enterprise OS Console</p>
             </div>
           </div>
           <div className="theme-surface flex flex-wrap items-center gap-3 rounded-[22px] border border-line bg-white px-2 py-2 shadow-[0_6px_18px_rgba(61,93,154,0.08)]">
-            <div className="relative order-last w-full xl:order-none xl:w-[240px]"><input ref={searchRef} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search (Ctrl K)" className="w-full rounded-2xl border border-line px-3 py-2 text-sm outline-none focus:border-brand-500" aria-label="Global search" />{searchQuery && <div className="theme-surface absolute left-0 top-[calc(100%+8px)] z-30 max-h-80 w-full overflow-y-auto rounded-2xl border border-line bg-white p-2 shadow-panel">{searchResults.length ? searchResults.map((result) => <div key={`${result.type}-${result.id}`} className="rounded-xl px-3 py-2 hover:bg-soft"><p className="text-sm font-semibold text-ink">{result.label}</p><p className="text-xs text-slate-500">{result.type}{result.detail ? ` · ${result.detail}` : ""}</p></div>) : <p className="px-3 py-2 text-xs text-slate-500">No matches.</p>}</div>}</div>
             <div ref={notificationsRef} className="relative">
               <button
                 onClick={() => setNotificationsOpen((current) => !current)}
@@ -288,54 +250,6 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
               title={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
             >
               <MoonStar className="h-5 w-5" />
-            </button>
-
-            <Link
-              href="/dashboard"
-              className="theme-surface theme-text rounded-2xl border border-line bg-white px-3 py-3 text-slate-700 transition hover:bg-soft"
-              aria-label="Go to dashboard"
-              title="Go to dashboard"
-            >
-              <PanelTop className="h-5 w-5" />
-            </Link>
-
-            <div ref={quickRef} className="relative">
-              <button
-                onClick={() => setQuickOpen((current) => !current)}
-                className="theme-surface theme-text rounded-2xl border border-line bg-white px-3 py-3 text-slate-700 transition hover:bg-soft"
-                aria-label="Open quick actions"
-              >
-                <Plus className="h-5 w-5" />
-              </button>
-              {quickOpen ? (
-                <div className="theme-surface absolute right-0 top-[calc(100%+10px)] w-[240px] rounded-[24px] border border-line bg-white p-3 shadow-panel">
-                  <p className="theme-text px-2 pb-2 text-sm font-semibold text-ink">Quick Actions</p>
-                  <div className="space-y-2">
-                    {visibleQuickActions.map((item) => {
-                      const Icon = item.icon;
-                      return (
-                        <Link
-                          key={item.href + item.label}
-                          href={item.href}
-                          className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 transition hover:bg-soft"
-                        >
-                          <Icon className="h-4 w-4 text-brand-500" />
-                          <span className="theme-text text-sm font-medium text-ink">{item.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <button
-              onClick={signOut}
-              className="theme-surface theme-text rounded-2xl border border-line bg-white px-3 py-3 text-slate-700 transition hover:bg-soft"
-              aria-label="Sign out"
-              title="Sign out"
-            >
-              <LogOut className="h-5 w-5" />
             </button>
 
             <div ref={profileRef} className="relative">

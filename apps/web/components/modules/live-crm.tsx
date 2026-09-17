@@ -13,6 +13,11 @@ type Deal = {
   currency: string;
   companyId?: string | null;
   company?: { name: string } | null;
+  caseType?: string;
+  caseNumber?: string | null;
+  courtName?: string | null;
+  nextHearingDate?: string | null;
+  caseNotes?: string | null;
 };
 
 type Contact = {
@@ -32,6 +37,7 @@ type Activity = {
   occurredAt: string;
   contactId?: string | null;
   contact?: { fullName: string } | null;
+  attachments?: Array<{ id: string; fileName: string; sizeBytes: number }>;
 };
 
 type PipelineGroup = {
@@ -48,7 +54,7 @@ type Company = {
   website?: string | null;
 };
 
-const emptyDeal = { id: "", title: "", amount: "", stage: "NEW", currency: "ZAR", companyId: "" };
+const emptyDeal = { id: "", title: "", amount: "", stage: "NEW", currency: "ZAR", companyId: "", caseType: "COURT", caseNumber: "", courtName: "", nextHearingDate: "", caseNotes: "" };
 const emptyContact = { id: "", fullName: "", email: "", phone: "", companyId: "", tags: "website,automation" };
 const emptyActivity = {
   id: "",
@@ -69,11 +75,14 @@ export function LiveCrm() {
   const [contactForm, setContactForm] = useState(emptyContact);
   const [activityForm, setActivityForm] = useState(emptyActivity);
   const [showDealForm, setShowDealForm] = useState(false);
+  const [dealFiles, setDealFiles] = useState<File[]>([]);
   const [showContactForm, setShowContactForm] = useState(false);
   const [showActivityForm, setShowActivityForm] = useState(false);
+  const [activityFiles, setActivityFiles] = useState<File[]>([]);
   const [contactSearch, setContactSearch] = useState("");
   const [contactFilter, setContactFilter] = useState("ALL");
   const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [pendingDeleteContactId, setPendingDeleteContactId] = useState<string | null>(null);
 
@@ -122,15 +131,29 @@ export function LiveCrm() {
         stage: dealForm.stage,
         currency: dealForm.currency || undefined,
         companyId: dealForm.companyId || "",
+        caseType: "COURT",
+        caseNumber: dealForm.caseNumber || undefined,
+        courtName: dealForm.courtName || undefined,
+        nextHearingDate: dealForm.nextHearingDate || undefined,
+        caseNotes: dealForm.caseNotes || undefined,
       };
+      let dealId = dealForm.id;
       if (dealForm.id) {
         await apiFetch(`/crm/deals/${dealForm.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-        notify("success", "Deal updated successfully.");
+        notify("success", "Court case updated successfully.");
       } else {
-        await apiFetch("/crm/deals", { method: "POST", body: JSON.stringify(payload) });
-        notify("success", "Deal created successfully.");
+        const response = await apiFetch<{ item: Deal }>("/crm/deals", { method: "POST", body: JSON.stringify(payload) });
+        dealId = response.item.id;
+        notify("success", "Court case created successfully.");
       }
+      for (const file of dealFiles) {
+        const multipart = new FormData();
+        multipart.append("file", file);
+        await apiFetch(`/crm/attachments/deal/${dealId}`, { method: "POST", body: multipart });
+      }
+      if (dealFiles.length) notify("success", `${dealFiles.length} court document${dealFiles.length === 1 ? "" : "s"} attached successfully.`);
       setDealForm(emptyDeal);
+      setDealFiles([]);
       setShowDealForm(false);
       await load();
     } catch (error) {
@@ -170,14 +193,23 @@ export function LiveCrm() {
         occurredAt: activityForm.occurredAt ? new Date(activityForm.occurredAt).toISOString() : undefined,
         contactId: activityForm.contactId || "",
       };
+      let activityId = activityForm.id;
       if (activityForm.id) {
         await apiFetch(`/crm/activities/${activityForm.id}`, { method: "PATCH", body: JSON.stringify(payload) });
         notify("success", "Activity updated successfully.");
       } else {
-        await apiFetch("/crm/activities", { method: "POST", body: JSON.stringify(payload) });
+        const response = await apiFetch<{ item: Activity }>("/crm/activities", { method: "POST", body: JSON.stringify(payload) });
+        activityId = response.item.id;
         notify("success", "Activity logged successfully.");
       }
+      for (const file of activityFiles) {
+        const multipart = new FormData();
+        multipart.append("file", file);
+        await apiFetch(`/crm/attachments/activity/${activityId}`, { method: "POST", body: multipart });
+      }
+      if (activityFiles.length) notify("success", `${activityFiles.length} document${activityFiles.length === 1 ? "" : "s"} attached successfully.`);
       setActivityForm(emptyActivity);
+      setActivityFiles([]);
       setShowActivityForm(false);
       await load();
     } catch (error) {
@@ -313,31 +345,16 @@ export function LiveCrm() {
               </thead>
               <tbody>
                 {filteredContacts.map((contact) => (
-                  <tr key={contact.id} className="border-b border-line transition hover:bg-soft/40">
+                  <tr key={contact.id} onClick={() => setSelectedContact(contact)} className="cursor-pointer border-b border-line transition hover:bg-soft/40">
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => {
-                          setContactForm({
-                            id: contact.id,
-                            fullName: contact.fullName,
-                            email: contact.email ?? "",
-                            phone: contact.phone ?? "",
-                            companyId: contact.companyId ?? "",
-                            tags: contact.tags.join(", "),
-                          });
-                          setShowContactForm(true);
-                        }}
-                        className="text-sm font-semibold text-ink transition hover:text-brand-500"
-                      >
-                        {contact.fullName}
-                      </button>
+                      <p className="text-sm font-semibold text-ink">{contact.fullName}</p>
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{contact.email ?? "No email"}</td>
                     <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{contact.phone ?? "No phone"}</td>
                     <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">
                       {contact.company?.name && contact.companyId ? (
                         <button
-                          onClick={() => setActiveCompanyId(contact.companyId ?? null)}
+                          onClick={(event) => { event.stopPropagation(); setActiveCompanyId(contact.companyId ?? null); }}
                           className="font-medium text-slate-700 transition hover:text-brand-500"
                         >
                           {contact.company.name}
@@ -358,7 +375,8 @@ export function LiveCrm() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => {
+                          onClick={(event) => {
+                            event.stopPropagation();
                             setContactForm({
                               id: contact.id,
                               fullName: contact.fullName,
@@ -374,7 +392,7 @@ export function LiveCrm() {
                           Edit
                         </button>
                         <button
-                          onClick={() => setPendingDeleteContactId(contact.id)}
+                          onClick={(event) => { event.stopPropagation(); setPendingDeleteContactId(contact.id); }}
                           className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -397,6 +415,30 @@ export function LiveCrm() {
         </Card>
 
       </div>
+
+      {selectedContact ? (
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/35 px-4 py-8 backdrop-blur-sm" onClick={() => setSelectedContact(null)}>
+          <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-line bg-white shadow-[0_30px_80px_rgba(15,23,42,0.2)]" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-500">Contact details</p>
+                <h3 className="mt-1 text-2xl font-semibold text-ink">{selectedContact.fullName}</h3>
+                <p className="mt-1 text-sm text-slate-500">Read-only customer and lead profile</p>
+              </div>
+              <button onClick={() => setSelectedContact(null)} className="rounded-full border border-line px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-soft">Close</button>
+            </div>
+            <div className="grid gap-3 px-6 py-5 sm:grid-cols-2">
+              <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Email</p><p className="mt-2 text-sm font-medium text-ink">{selectedContact.email || "Not provided"}</p></div>
+              <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Phone</p><p className="mt-2 text-sm font-medium text-ink">{selectedContact.phone || "Not provided"}</p></div>
+              <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Company</p><p className="mt-2 text-sm font-medium text-ink">{selectedContact.company?.name || "Unlinked"}</p></div>
+              <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Tags</p><div className="mt-2 flex flex-wrap gap-1.5">{selectedContact.tags.length ? selectedContact.tags.map((tag) => <span key={tag} className="rounded-full bg-brand-50 px-2 py-1 text-[10px] font-semibold text-brand-500">{tag}</span>) : <span className="text-sm text-slate-400">No tags</span>}</div></div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-line px-6 py-4">
+              <button onClick={() => { setSelectedContact(null); setContactForm({ id: selectedContact.id, fullName: selectedContact.fullName, email: selectedContact.email ?? "", phone: selectedContact.phone ?? "", companyId: selectedContact.companyId ?? "", tags: selectedContact.tags.join(", ") }); setShowContactForm(true); }} className="rounded-2xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white">Edit contact</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {activeCompany ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4 py-8 backdrop-blur-sm">
@@ -583,7 +625,13 @@ export function LiveCrm() {
                           stage: "NEW",
                           currency: "ZAR",
                           companyId: contactForm.companyId || "",
+                          caseType: "COURT",
+                          caseNumber: "",
+                          courtName: "",
+                          nextHearingDate: "",
+                          caseNotes: "",
                         });
+                        setDealFiles([]);
                         setShowContactForm(false);
                         setShowDealForm(true);
                       }}
@@ -623,8 +671,9 @@ export function LiveCrm() {
                             title: activity.title,
                             type: activity.type,
                             occurredAt: new Date(activity.occurredAt).toISOString().slice(0, 16),
-                            contactId: activity.contactId ?? contactForm.id,
-                          });
+                          contactId: activity.contactId ?? contactForm.id,
+                        });
+                        setActivityFiles([]);
                           setShowContactForm(false);
                           setShowActivityForm(true);
                         }}
@@ -679,13 +728,13 @@ export function LiveCrm() {
             <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {dealForm.id ? "Edit Case" : "New Case"}
+                  {dealForm.id ? "Edit Court Case" : "New Court Case"}
                 </p>
                 <h3 className="mt-1 text-2xl font-semibold text-ink">
-                  {dealForm.id ? "Update case details" : "Create a new case"}
+                  {dealForm.id ? "Update court case details" : "Create a court case"}
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Cases are tracked as live CRM opportunities linked to the client company.
+                  Manage the legal matter, court information, hearing dates, and supporting documents.
                 </p>
               </div>
               <button
@@ -702,8 +751,15 @@ export function LiveCrm() {
             </div>
 
             <div className="space-y-3 px-6 py-5">
-              <input value={dealForm.title} onChange={(event) => setDealForm((current) => ({ ...current, title: event.target.value }))} placeholder="Case title" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
-              <input value={dealForm.amount} onChange={(event) => setDealForm((current) => ({ ...current, amount: event.target.value }))} placeholder="Amount" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+              <div className="grid gap-3 md:grid-cols-2">
+                <input value={dealForm.title} onChange={(event) => setDealForm((current) => ({ ...current, title: event.target.value }))} placeholder="Matter title" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+                <input value={dealForm.caseNumber} onChange={(event) => setDealForm((current) => ({ ...current, caseNumber: event.target.value }))} placeholder="Court case number" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <input value={dealForm.courtName} onChange={(event) => setDealForm((current) => ({ ...current, courtName: event.target.value }))} placeholder="Court name" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+                <input type="date" value={dealForm.nextHearingDate} onChange={(event) => setDealForm((current) => ({ ...current, nextHearingDate: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none focus:border-brand-500" />
+              </div>
+              <input value={dealForm.amount} onChange={(event) => setDealForm((current) => ({ ...current, amount: event.target.value }))} placeholder="Matter value (optional)" type="number" min="0" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
               <div className="grid gap-3 md:grid-cols-2">
                 <select value={dealForm.stage} onChange={(event) => setDealForm((current) => ({ ...current, stage: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500">
                   {["NEW", "DISCOVERY", "PROPOSAL", "NEGOTIATION", "WON", "LOST"].map((stage) => <option key={stage} value={stage}>{stage}</option>)}
@@ -714,6 +770,13 @@ export function LiveCrm() {
                 <option value="">Unlinked company</option>
                 {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
               </select>
+              <textarea value={dealForm.caseNotes} onChange={(event) => setDealForm((current) => ({ ...current, caseNotes: event.target.value }))} placeholder="Case notes, parties, and legal instructions" rows={3} className="w-full resize-y rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+              <label className="block rounded-2xl border border-dashed border-line bg-slate-50/60 p-4">
+                <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Court documents</span>
+                <span className="mt-1 block text-xs text-slate-500">Attach pleadings, notices, judgments, contracts, or other legal documents. PDF, Word, PNG, JPEG, and TXT up to 10 MB each.</span>
+                <input type="file" multiple accept=".pdf,.docx,.png,.jpg,.jpeg,.txt" onChange={(event) => setDealFiles(Array.from(event.target.files ?? []))} className="mt-3 block w-full text-sm text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-brand-600" />
+                {dealFiles.length ? <p className="mt-2 text-xs font-medium text-brand-600">{dealFiles.length} document{dealFiles.length === 1 ? "" : "s"} ready to upload</p> : null}
+              </label>
             </div>
 
             <div className="flex items-center justify-end gap-3 border-t border-line px-6 py-4">
@@ -732,7 +795,7 @@ export function LiveCrm() {
                 onClick={() => void saveDeal()}
                 className="rounded-2xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white"
               >
-                {dealForm.id ? "Update Case" : "Save Case"}
+                {dealForm.id ? "Update Court Case" : "Save Court Case"}
               </button>
             </div>
           </div>

@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Headers, Post, Query, Res, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Headers, Post, Query, Res, UnauthorizedException } from "@nestjs/common";
 import { z } from "zod";
 import { parseInput } from "../../common/validation";
 import { AuthService } from "./auth.service";
+import { PrismaService } from "../../prisma/prisma.service";
 
 const loginSchema = z.object({ email: z.string().trim().email(), password: z.string().min(1), tenantId: z.string().trim().min(3).optional() });
 const signupSchema = z.object({ workspaceName: z.string().trim().min(2), workspaceSlug: z.string().trim().min(3).optional(), ownerName: z.string().trim().min(2), ownerEmail: z.string().trim().email(), password: z.string().min(10), planCode: z.enum(["starter", "growth", "enterprise"]).optional() });
@@ -12,7 +13,7 @@ const oauthCodeSchema = z.object({ code: z.string().min(20) });
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService, private readonly prisma: PrismaService) {}
 
   private cookieValue(cookieHeader: string | undefined, name: string) {
     return cookieHeader?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
@@ -43,6 +44,37 @@ export class AuthController {
   @Get("workspace-availability")
   workspaceAvailability(@Headers("x-workspace-slug") workspaceSlug?: string) {
     return this.authService.workspaceAvailability(workspaceSlug ?? "");
+  }
+
+  @Post("attendance/kiosk")
+  async attendanceKiosk(@Body() body: { tenantId?: string; employeeNumber?: string; qrToken?: string; action?: string; location?: string; device?: string }) {
+    const tenantSlug = body.tenantId?.trim() || "demo-tenant";
+    const tenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
+    if (!tenant) throw new BadRequestException("Workspace not found.");
+    const employee = body.qrToken
+      ? await this.prisma.employee.findFirst({ where: { tenantId: tenant.id, attendanceQrToken: body.qrToken, employmentStatus: "ACTIVE" } })
+      : await this.prisma.employee.findFirst({ where: { tenantId: tenant.id, employeeNumber: body.employeeNumber?.trim(), employmentStatus: "ACTIVE" } });
+    if (!employee) throw new BadRequestException("Active employee not found. Scan a valid QR code or enter the employee number.");
+    const day = new Date();
+    day.setHours(0, 0, 0, 0);
+    const action = body.action?.toUpperCase() === "OUT" ? "OUT" : "IN";
+    const existing = await this.prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: employee.id, date: day } } });
+    if (action === "IN") {
+      if (existing?.checkInAt && !existing.checkOutAt) throw new BadRequestException(`${employee.fullName} is already clocked in.`);
+      const item = existing
+        ? await this.prisma.attendanceRecord.update({ where: { id: existing.id }, data: { checkInAt: new Date(), checkOutAt: null, status: "PRESENT", location: body.location, device: body.device, clockInMethod: body.qrToken ? "QR_KIOSK" : "EMPLOYEE_NUMBER_KIOSK" } })
+        : await this.prisma.attendanceRecord.create({ data: { employeeId: employee.id, date: day, status: "PRESENT", checkInAt: new Date(), location: body.location, device: body.device, clockInMethod: body.qrToken ? "QR_KIOSK" : "EMPLOYEE_NUMBER_KIOSK" } });
+      return { action, employee: { id: employee.id, fullName: employee.fullName, employeeNumber: employee.employeeNumber }, item };
+    }
+    if (!existing?.checkInAt) throw new BadRequestException(`${employee.fullName} has not clocked in today.`);
+    if (existing.checkOutAt) throw new BadRequestException(`${employee.fullName} is already clocked out.`);
+    const item = await this.prisma.attendanceRecord.update({ where: { id: existing.id }, data: { checkOutAt: new Date(), location: body.location, device: body.device } });
+    return { action, employee: { id: employee.id, fullName: employee.fullName, employeeNumber: employee.employeeNumber }, item };
+  }
+
+  @Get("workspace-branding")
+  workspaceBranding(@Headers("x-workspace-slug") workspaceSlug?: string) {
+    return this.authService.workspaceBranding(workspaceSlug ?? "demo-tenant");
   }
 
   @Post("signup")

@@ -43,6 +43,17 @@ type Invoice = {
   notes?: string | null;
   issuedAt?: string;
   dueAt?: string;
+  items?: InvoiceLineItem[];
+};
+
+type InvoiceLineItem = {
+  id?: string;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  discount: string;
+  taxRate: string;
+  lineTotal?: string;
 };
 
 type CrmContact = {
@@ -78,9 +89,16 @@ type Payment = {
 
 type Vendor = {
   id: string;
+  supplierNumber?: string | null;
   name: string;
+  contactPerson?: string | null;
   email?: string | null;
   phone?: string | null;
+  address?: string | null;
+  vatNumber?: string | null;
+  registrationNumber?: string | null;
+  bankInformation?: string | null;
+  notes?: string | null;
   category?: string | null;
   paymentTerms?: string | null;
   active: boolean;
@@ -164,10 +182,11 @@ const emptyInvoice = {
   taxAmount: "",
   status: "SENT",
   currency: "ZAR",
+  lineItems: [{ description: "", quantity: "1", unitPrice: "", discount: "0", taxRate: "15" }] as InvoiceLineItem[],
 };
 const emptyExpense = { id: "", category: "", vendor: "", amount: "", currency: "ZAR", invoiceId: "", incurredAt: "2026-08-04", status: "DRAFT" };
 const emptyPayment = { id: "", provider: "Manual", amount: "", invoiceId: "", receivedAt: "2026-08-04T12:00" };
-const emptyVendor = { id: "", name: "", email: "", phone: "", category: "", paymentTerms: "", active: "true" };
+const emptyVendor = { id: "", supplierNumber: "", name: "", contactPerson: "", email: "", phone: "", address: "", vatNumber: "", registrationNumber: "", bankInformation: "", notes: "", category: "", paymentTerms: "", active: "true" };
 const emptyBank = { id: "", bankName: "", accountName: "", accountNumber: "", currency: "ZAR", currentBalance: "", active: "true" };
 const emptyAccount = { id: "", code: "", name: "", category: "Asset", balanceSide: "DEBIT", active: "true" };
 const emptyTaxRate = { id: "", name: "", code: "", ratePercent: "15", appliesTo: "SALES", active: "true" };
@@ -313,6 +332,7 @@ function TableHeader({
   title,
   description,
   count,
+  countLabel = "shown",
   addLabel,
   onAdd,
   search,
@@ -326,6 +346,7 @@ function TableHeader({
   title: string;
   description: string;
   count: number;
+  countLabel?: string;
   addLabel?: string;
   onAdd?: () => void;
   search: string;
@@ -344,7 +365,7 @@ function TableHeader({
           <p className="mt-1 text-xs text-slate-500">{description}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">{count} shown</span>
+          <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-700">{count} {countLabel}</span>
           {onAdd && addLabel ? (
             <button onClick={onAdd} className="inline-flex items-center gap-2 rounded-2xl border border-line px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-soft">
               <Plus className="h-3.5 w-3.5" />
@@ -433,6 +454,7 @@ function InvoiceModal({
   onSave,
   title,
   buttonLabel,
+  documentType = "Invoice",
 }: {
   form: typeof emptyInvoice;
   setForm: Dispatch<SetStateAction<typeof emptyInvoice>>;
@@ -442,13 +464,28 @@ function InvoiceModal({
   onSave: () => void;
   title: string;
   buttonLabel: string;
+  documentType?: "Invoice" | "Quote";
 }) {
   const selectedContact = contacts.find((contact) => contact.id === form.contactId);
   const issuedDisplay = form.issuedAt ? new Date(form.issuedAt).toLocaleDateString("en-ZA") : "Today";
   const dueDisplay = form.dueAt ? new Date(form.dueAt).toLocaleDateString("en-ZA") : "Set due date";
+  const totals = form.lineItems.reduce((summary, line) => {
+    const quantity = Math.max(0, Number(line.quantity) || 0);
+    const unitPrice = Math.max(0, Number(line.unitPrice) || 0);
+    const discount = Math.max(0, Number(line.discount) || 0);
+    const net = Math.max(0, quantity * unitPrice - discount);
+    const tax = net * Math.max(0, Number(line.taxRate) || 0) / 100;
+    return { subtotal: summary.subtotal + net, tax: summary.tax + tax };
+  }, { subtotal: 0, tax: 0 });
+  const formatMoney = (value: number) => `${form.currency} ${value.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const updateLine = (index: number, key: keyof InvoiceLineItem, value: string) => {
+    setForm((current) => ({ ...current, lineItems: current.lineItems.map((line, lineIndex) => lineIndex === index ? { ...line, [key]: value } : line) }));
+  };
+  const addLine = () => setForm((current) => ({ ...current, lineItems: [...current.lineItems, { description: "", quantity: "1", unitPrice: "", discount: "0", taxRate: "15" }] }));
+  const removeLine = (index: number) => setForm((current) => ({ ...current, lineItems: current.lineItems.length === 1 ? current.lineItems : current.lineItems.filter((_, lineIndex) => lineIndex !== index) }));
 
   return (
-    <BaseModal label={title} title="Create a branded accounting document" onClose={onClose} onSave={onSave} saveLabel={buttonLabel}>
+    <BaseModal label={title} title={`Create a branded ${documentType.toLowerCase()}`} onClose={onClose} onSave={onSave} saveLabel={buttonLabel}>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(420px,0.88fr)]">
         <div className="grid gap-3 md:grid-cols-2">
           <select
@@ -476,14 +513,35 @@ function InvoiceModal({
           <input value={form.customer} onChange={(event) => setForm((current) => ({ ...current, customer: event.target.value }))} placeholder="Billing name" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 md:col-span-2" />
           <input value={form.billingEmail} onChange={(event) => setForm((current) => ({ ...current, billingEmail: event.target.value }))} placeholder="Billing email" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
           <input value={form.billingPhone} onChange={(event) => setForm((current) => ({ ...current, billingPhone: event.target.value }))} placeholder="Billing phone" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
-          <input value={form.number} onChange={(event) => setForm((current) => ({ ...current, number: event.target.value.toUpperCase() }))} placeholder="Invoice number" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
-          <input value={form.purchaseOrder} onChange={(event) => setForm((current) => ({ ...current, purchaseOrder: event.target.value }))} placeholder="PO / reference" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+          <input value={form.number} onChange={(event) => setForm((current) => ({ ...current, number: event.target.value.toUpperCase() }))} placeholder={`${documentType} number`} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+          <input value={form.purchaseOrder} onChange={(event) => setForm((current) => ({ ...current, purchaseOrder: event.target.value }))} placeholder={documentType === "Quote" ? "Reference / project" : "PO / reference"} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
           <input type="date" value={form.issuedAt} onChange={(event) => setForm((current) => ({ ...current, issuedAt: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
           <input type="date" value={form.dueAt} onChange={(event) => setForm((current) => ({ ...current, dueAt: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+          <div className="rounded-3xl border border-line bg-slate-50/70 p-4 md:col-span-2">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div><p className="text-sm font-semibold text-ink">Invoice items</p><p className="text-xs text-slate-500">Add products or services, discounts, and tax per line.</p></div>
+              <button type="button" onClick={addLine} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-2 text-xs font-semibold text-white"><Plus className="h-3.5 w-3.5" /> Add item</button>
+            </div>
+            <div className="space-y-2">
+              {form.lineItems.map((line, index) => {
+                const lineTotal = Math.max(0, (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0) - (Number(line.discount) || 0));
+                return <div key={index} className="grid gap-2 rounded-2xl border border-line bg-white p-3 md:grid-cols-[minmax(0,1.6fr)_80px_110px_100px_85px_110px_32px] md:items-end">
+                  <label className="text-xs font-medium text-slate-500">Description<input value={line.description} onChange={(event) => updateLine(index, "description", event.target.value)} placeholder="Product or service" className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
+                  <label className="text-xs font-medium text-slate-500">Qty<input type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
+                  <label className="text-xs font-medium text-slate-500">Unit price<input type="number" min="0" step="0.01" value={line.unitPrice} onChange={(event) => updateLine(index, "unitPrice", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
+                  <label className="text-xs font-medium text-slate-500">Discount<input type="number" min="0" step="0.01" value={line.discount} onChange={(event) => updateLine(index, "discount", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
+                  <label className="text-xs font-medium text-slate-500">Tax %<input type="number" min="0" step="0.01" value={line.taxRate} onChange={(event) => updateLine(index, "taxRate", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
+                  <div><p className="text-xs font-medium text-slate-500">Line total</p><p className="mt-1 rounded-xl bg-soft px-3 py-2.5 text-sm font-semibold text-ink">{formatMoney(lineTotal)}</p></div>
+                  <button type="button" onClick={() => removeLine(index)} disabled={form.lineItems.length === 1} aria-label="Remove item" className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
+                </div>;
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap justify-end gap-x-6 gap-y-1 text-sm"><span className="text-slate-500">Subtotal <strong className="text-ink">{formatMoney(totals.subtotal)}</strong></span><span className="text-slate-500">Tax <strong className="text-ink">{formatMoney(totals.tax)}</strong></span><span className="text-ink">Total <strong className="text-brand-500">{formatMoney(totals.subtotal + totals.tax)}</strong></span></div>
+          </div>
           <textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} placeholder="Description / scope of work" rows={3} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 md:col-span-2" />
           <textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes / payment terms" rows={3} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 md:col-span-2" />
-          <input value={form.subtotal} onChange={(event) => setForm((current) => ({ ...current, subtotal: event.target.value }))} placeholder="Subtotal" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
-          <input value={form.taxAmount} onChange={(event) => setForm((current) => ({ ...current, taxAmount: event.target.value }))} placeholder="Tax amount" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+          <div className="rounded-2xl border border-line bg-soft/50 px-4 py-3 text-sm text-slate-600">Calculated subtotal <strong className="text-ink">{formatMoney(totals.subtotal)}</strong></div>
+          <div className="rounded-2xl border border-line bg-soft/50 px-4 py-3 text-sm text-slate-600">Calculated tax <strong className="text-ink">{formatMoney(totals.tax)}</strong></div>
           <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500">
             {["DRAFT", "SENT", "PAID", "OVERDUE", "VOID"].map((status) => <option key={status} value={status}>{status}</option>)}
           </select>
@@ -517,7 +575,7 @@ function InvoiceModal({
               </div>
               <div className="grid grid-cols-2 gap-3 rounded-2xl bg-soft/40 p-3">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Invoice No.</p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{documentType} No.</p>
                   <p className="text-sm font-semibold text-ink">{form.number || "Auto-generated"}</p>
                 </div>
                 <div>
@@ -529,7 +587,7 @@ function InvoiceModal({
                   <p className="text-sm font-semibold text-ink">{issuedDisplay}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Due</p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">{documentType === "Quote" ? "Valid until" : "Due"}</p>
                   <p className="text-sm font-semibold text-ink">{dueDisplay}</p>
                 </div>
               </div>
@@ -539,19 +597,29 @@ function InvoiceModal({
                   <p className="text-xs text-slate-600">{form.description}</p>
                 </div>
               ) : null}
+              <div className="border-t border-line pt-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Items</p>
+                <div className="mt-2 space-y-2">
+                  {form.lineItems.filter((line) => line.description.trim()).map((line, index) => {
+                    const lineTotal = Math.max(0, (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0) - (Number(line.discount) || 0));
+                    return <div key={`${line.description}-${index}`} className="flex items-start justify-between gap-3 text-xs"><div><p className="font-medium text-ink">{line.description}</p><p className="text-slate-500">{line.quantity || 0} × {formatMoney(Number(line.unitPrice) || 0)}{Number(line.discount) > 0 ? ` · discount ${formatMoney(Number(line.discount))}` : ""}</p></div><span className="font-semibold text-ink">{formatMoney(lineTotal)}</span></div>;
+                  })}
+                  {form.lineItems.every((line) => !line.description.trim()) ? <p className="text-xs text-slate-500">Add at least one item to build the document total.</p> : null}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3 rounded-2xl bg-soft/40 p-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Subtotal</p>
-                  <p className="text-sm font-semibold text-ink">{form.currency} {Number(form.subtotal || 0).toLocaleString()}</p>
+                <p className="text-sm font-semibold text-ink">{formatMoney(totals.subtotal)}</p>
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Tax</p>
-                  <p className="text-sm font-semibold text-ink">{form.currency} {Number(form.taxAmount || 0).toLocaleString()}</p>
+                  <p className="text-sm font-semibold text-ink">{formatMoney(totals.tax)}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between border-t border-line pt-3">
                 <p className="text-sm font-semibold text-ink">Total</p>
-                <p className="text-base font-semibold text-brand-500">{form.currency} {(Number(form.subtotal || 0) + Number(form.taxAmount || 0)).toLocaleString()}</p>
+                <p className="text-base font-semibold text-brand-500">{formatMoney(totals.subtotal + totals.tax)}</p>
               </div>
               {form.notes ? (
                 <div className="border-t border-line pt-3">
@@ -565,6 +633,10 @@ function InvoiceModal({
       </div>
     </BaseModal>
   );
+}
+
+function AccountingDetailModal({ invoice, label, onClose }: { invoice: Invoice; label: string; onClose: () => void }) {
+  return <BaseModal label="Record details" title={`${label} ${invoice.number}`} onClose={onClose} onSave={onClose} saveLabel="Close"><div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2"><div className="rounded-2xl border border-line bg-slate-50/70 p-3"><p className="text-xs text-slate-500">Customer</p><p className="mt-1 text-sm font-semibold text-ink">{invoice.customer}</p><p className="mt-1 text-xs text-slate-500">{invoice.billingEmail || "No email"}</p></div><div className="rounded-2xl border border-line bg-slate-50/70 p-3"><p className="text-xs text-slate-500">Status</p><p className="mt-1 text-sm font-semibold text-ink">{invoice.status}</p><p className="mt-1 text-xs text-slate-500">Issued {invoice.issuedAt?.slice(0, 10) || "Not set"} · Due {invoice.dueAt?.slice(0, 10) || "Not set"}</p></div></div><div className="rounded-2xl border border-line p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Items and totals</p><div className="mt-3 space-y-2">{(invoice.items ?? []).map((item) => <div key={item.id} className="flex justify-between gap-3 text-sm"><span className="text-slate-600">{item.description} · {Number(item.quantity)} × {invoice.currency} {Number(item.unitPrice).toFixed(2)}</span><strong className="text-ink">{invoice.currency} {Number(item.lineTotal).toFixed(2)}</strong></div>)}{!(invoice.items ?? []).length ? <p className="text-sm text-slate-500">No line items recorded.</p> : null}</div><div className="mt-4 space-y-1 border-t border-line pt-3 text-right text-sm"><p className="text-slate-500">Subtotal: <strong className="text-ink">{invoice.currency} {Number(invoice.subtotal).toFixed(2)}</strong></p><p className="text-slate-500">Tax: <strong className="text-ink">{invoice.currency} {Number(invoice.taxAmount).toFixed(2)}</strong></p><p className="text-base font-semibold text-brand-500">Total: {invoice.currency} {Number(invoice.total).toFixed(2)}</p></div></div></div></BaseModal>;
 }
 
 function ExpenseModal({ form, setForm, invoices, onClose, onSave }: { form: typeof emptyExpense; setForm: Dispatch<SetStateAction<typeof emptyExpense>>; invoices: Invoice[]; onClose: () => void; onSave: () => void }) {
@@ -606,11 +678,18 @@ function VendorModal({ form, setForm, onClose, onSave }: { form: typeof emptyVen
   return (
     <BaseModal label={form.id ? "Edit Vendor" : "Add Vendor"} title="Manage vendor profile" onClose={onClose} onSave={onSave} saveLabel={form.id ? "Update Vendor" : "Save Vendor"}>
       <div className="grid gap-3 md:grid-cols-2">
-        <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Vendor name" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 md:col-span-2" />
+        <input value={form.supplierNumber} onChange={(event) => setForm((current) => ({ ...current, supplierNumber: event.target.value }))} placeholder="Supplier number (optional)" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+        <input required value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Vendor name" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+        <input value={form.contactPerson} onChange={(event) => setForm((current) => ({ ...current, contactPerson: event.target.value }))} placeholder="Contact person" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
         <input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="Email" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
         <input value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+        <textarea value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} placeholder="Business address" rows={2} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 md:col-span-2" />
+        <input value={form.vatNumber} onChange={(event) => setForm((current) => ({ ...current, vatNumber: event.target.value }))} placeholder="VAT number" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+        <input value={form.registrationNumber} onChange={(event) => setForm((current) => ({ ...current, registrationNumber: event.target.value }))} placeholder="Registration number" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
         <input value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} placeholder="Category" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
         <input value={form.paymentTerms} onChange={(event) => setForm((current) => ({ ...current, paymentTerms: event.target.value }))} placeholder="Payment terms" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+        <input value={form.bankInformation} onChange={(event) => setForm((current) => ({ ...current, bankInformation: event.target.value }))} placeholder="Banking details" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+        <textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes" rows={2} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 md:col-span-2" />
         <select value={form.active} onChange={(event) => setForm((current) => ({ ...current, active: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 md:col-span-2">
           <option value="true">Active</option>
           <option value="false">Inactive</option>
@@ -780,6 +859,7 @@ export function LiveInvoices() {
   const [form, setForm] = useState(emptyInvoice);
   const [showForm, setShowForm] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return invoices.filter((invoice) => {
@@ -803,6 +883,7 @@ export function LiveInvoices() {
         dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : undefined,
         subtotal: form.subtotal ? Number(form.subtotal) : undefined,
         taxAmount: form.taxAmount ? Number(form.taxAmount) : undefined,
+        lineItems: form.id && form.status !== "DRAFT" ? undefined : form.lineItems.filter((line) => line.description.trim()).map((line) => ({ description: line.description, quantity: Number(line.quantity), unitPrice: Number(line.unitPrice), discount: Number(line.discount || 0), taxRate: Number(line.taxRate || 0) })),
         status: form.status,
         currency: form.currency || undefined,
       };
@@ -862,13 +943,13 @@ export function LiveInvoices() {
             <thead className="border-b border-line bg-slate-50/70"><tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500"><th className="px-4 py-2.5 font-semibold">Invoice</th><th className="px-4 py-2.5 font-semibold">Customer</th><th className="px-4 py-2.5 font-semibold">CRM Link</th><th className="px-4 py-2.5 font-semibold">Status</th><th className="px-4 py-2.5 font-semibold">Total</th><th className="px-4 py-2.5 text-right font-semibold">Actions</th></tr></thead>
             <tbody>
               {filtered.map((invoice) => (
-                <tr key={invoice.id} className="border-b border-line transition hover:bg-soft/40">
+                <tr key={invoice.id} onClick={() => setSelectedInvoice(invoice)} className="cursor-pointer border-b border-line transition hover:bg-soft/40">
                   <td className="px-4 py-3 text-sm font-semibold text-ink">{invoice.number}</td>
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{invoice.customer}</td>
                   <td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{invoice.contact?.fullName || invoice.company?.name || "Unlinked"}</td>
                   <td className="px-4 py-3"><span className="rounded-full bg-soft px-2.5 py-1 text-[10px] font-semibold text-slate-700">{invoice.status}</span></td>
                   <td className="px-4 py-3 text-xs font-semibold text-brand-500 md:text-sm">{invoice.currency} {Number(invoice.total).toLocaleString()}</td>
-                  <td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => void downloadPdf(invoice)} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">PDF</button><button onClick={() => { setForm({ id: invoice.id, customer: invoice.customer, billingEmail: invoice.billingEmail ?? "", billingPhone: invoice.billingPhone ?? "", contactId: invoice.contactId ?? "", companyId: invoice.companyId ?? "", number: invoice.number ?? "", purchaseOrder: invoice.purchaseOrder ?? "", description: invoice.description ?? "", notes: invoice.notes ?? "", issuedAt: invoice.issuedAt?.slice(0, 10) ?? "2026-08-04", dueAt: invoice.dueAt?.slice(0, 10) ?? "2026-08-18", subtotal: String(Number(invoice.subtotal)), taxAmount: String(Number(invoice.taxAmount)), status: invoice.status, currency: invoice.currency }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button><button onClick={() => setPendingDelete(invoice.id)} className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-soft"><Trash2 className="h-3.5 w-3.5" /><span>Delete</span></button></div></td>
+                  <td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={(event) => { event.stopPropagation(); void downloadPdf(invoice); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">PDF</button><button onClick={(event) => { event.stopPropagation(); setForm({ id: invoice.id, customer: invoice.customer, billingEmail: invoice.billingEmail ?? "", billingPhone: invoice.billingPhone ?? "", contactId: invoice.contactId ?? "", companyId: invoice.companyId ?? "", number: invoice.number ?? "", purchaseOrder: invoice.purchaseOrder ?? "", description: invoice.description ?? "", notes: invoice.notes ?? "", issuedAt: invoice.issuedAt?.slice(0, 10) ?? "2026-08-04", dueAt: invoice.dueAt?.slice(0, 10) ?? "2026-08-18", subtotal: String(Number(invoice.subtotal)), taxAmount: String(Number(invoice.taxAmount)), status: invoice.status, currency: invoice.currency, lineItems: (invoice.items ?? []).map((line) => ({ id: line.id, description: line.description, quantity: String(Number(line.quantity)), unitPrice: String(Number(line.unitPrice)), discount: String(Number(line.discount)), taxRate: String(Number(line.taxRate)), lineTotal: String(Number(line.lineTotal)) })) || emptyInvoice.lineItems }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button><button onClick={(event) => { event.stopPropagation(); setPendingDelete(invoice.id); }} className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-soft"><Trash2 className="h-3.5 w-3.5" /><span>Delete</span></button></div></td>
                 </tr>
               ))}
               {filtered.length === 0 ? <tr><td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">No invoices match the current search or filter.</td></tr> : null}
@@ -878,6 +959,7 @@ export function LiveInvoices() {
       </Card>
       {showForm ? <InvoiceModal form={form} setForm={setForm} contacts={contacts} settings={settings} onClose={() => { setShowForm(false); if (!form.id) setForm(emptyInvoice); }} onSave={() => void saveInvoice()} title={form.id ? "Edit Invoice" : "Create Invoice"} buttonLabel={form.id ? "Update Invoice" : "Create Invoice"} /> : null}
       {pendingDelete ? <DeleteModal title="Remove this invoice?" onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteInvoice(pendingDelete)} confirmLabel="Delete Invoice" /> : null}
+      {selectedInvoice ? <AccountingDetailModal invoice={selectedInvoice} label="Invoice" onClose={() => setSelectedInvoice(null)} /> : null}
       <AccountingToast toast={toast} />
     </div>
   );
@@ -888,6 +970,7 @@ export function LiveQuotes() {
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({ ...emptyInvoice, status: "DRAFT" });
   const [showForm, setShowForm] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState<Invoice | null>(null);
   const quotes = useMemo(() => invoices.filter((invoice) => invoice.status === "DRAFT"), [invoices]);
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -910,6 +993,7 @@ export function LiveQuotes() {
         dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : undefined,
         subtotal: form.subtotal ? Number(form.subtotal) : undefined,
         taxAmount: form.taxAmount ? Number(form.taxAmount) : undefined,
+        lineItems: form.id && form.status !== "DRAFT" ? undefined : form.lineItems.filter((line) => line.description.trim()).map((line) => ({ description: line.description, quantity: Number(line.quantity), unitPrice: Number(line.unitPrice), discount: Number(line.discount || 0), taxRate: Number(line.taxRate || 0) })),
         status: "DRAFT",
         currency: form.currency || undefined,
       };
@@ -936,13 +1020,14 @@ export function LiveQuotes() {
           <table className="min-w-full text-left">
             <thead className="border-b border-line bg-slate-50/70"><tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500"><th className="px-4 py-2.5 font-semibold">Quote</th><th className="px-4 py-2.5 font-semibold">Customer</th><th className="px-4 py-2.5 font-semibold">Value</th><th className="px-4 py-2.5 text-right font-semibold">Actions</th></tr></thead>
             <tbody>
-              {filtered.map((quote) => <tr key={quote.id} className="border-b border-line transition hover:bg-soft/40"><td className="px-4 py-3 text-sm font-semibold text-ink">{quote.number}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{quote.customer}</td><td className="px-4 py-3 text-xs font-semibold text-brand-500 md:text-sm">{quote.currency} {Number(quote.total).toLocaleString()}</td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => { setForm({ id: quote.id, customer: quote.customer, billingEmail: quote.billingEmail ?? "", billingPhone: quote.billingPhone ?? "", contactId: quote.contactId ?? "", companyId: quote.companyId ?? "", number: quote.number ?? "", purchaseOrder: quote.purchaseOrder ?? "", description: quote.description ?? "", notes: quote.notes ?? "", issuedAt: quote.issuedAt?.slice(0, 10) ?? "2026-08-04", dueAt: quote.dueAt?.slice(0, 10) ?? "2026-08-18", subtotal: String(Number(quote.subtotal)), taxAmount: String(Number(quote.taxAmount)), status: "DRAFT", currency: quote.currency }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button></div></td></tr>)}
+              {filtered.map((quote) => <tr key={quote.id} onClick={() => setSelectedQuote(quote)} className="cursor-pointer border-b border-line transition hover:bg-soft/40"><td className="px-4 py-3 text-sm font-semibold text-ink">{quote.number}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{quote.customer}</td><td className="px-4 py-3 text-xs font-semibold text-brand-500 md:text-sm">{quote.currency} {Number(quote.total).toLocaleString()}</td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={(event) => { event.stopPropagation(); setForm({ id: quote.id, customer: quote.customer, billingEmail: quote.billingEmail ?? "", billingPhone: quote.billingPhone ?? "", contactId: quote.contactId ?? "", companyId: quote.companyId ?? "", number: quote.number ?? "", purchaseOrder: quote.purchaseOrder ?? "", description: quote.description ?? "", notes: quote.notes ?? "", issuedAt: quote.issuedAt?.slice(0, 10) ?? "2026-08-04", dueAt: quote.dueAt?.slice(0, 10) ?? "2026-08-18", subtotal: String(Number(quote.subtotal)), taxAmount: String(Number(quote.taxAmount)), status: "DRAFT", currency: quote.currency, lineItems: emptyInvoice.lineItems }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button></div></td></tr>)}
               {filtered.length === 0 ? <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">No quotes available yet.</td></tr> : null}
             </tbody>
           </table>
         </div>
       </Card>
-      {showForm ? <InvoiceModal form={form} setForm={setForm} contacts={contacts} settings={settings} onClose={() => { setShowForm(false); if (!form.id) setForm({ ...emptyInvoice, status: "DRAFT" }); }} onSave={() => void saveQuote()} title={form.id ? "Edit Quote" : "Create Quote"} buttonLabel={form.id ? "Update Quote" : "Create Quote"} /> : null}
+      {showForm ? <InvoiceModal form={form} setForm={setForm} contacts={contacts} settings={settings} onClose={() => { setShowForm(false); if (!form.id) setForm({ ...emptyInvoice, status: "DRAFT" }); }} onSave={() => void saveQuote()} title={form.id ? "Edit Quote" : "Create Quote"} buttonLabel={form.id ? "Update Quote" : "Create Quote"} documentType="Quote" /> : null}
+      {selectedQuote ? <AccountingDetailModal invoice={selectedQuote} label="Quote" onClose={() => setSelectedQuote(null)} /> : null}
       <AccountingToast toast={toast} />
     </div>
   );
@@ -1102,7 +1187,7 @@ export function LiveVendors() {
 
   async function saveVendor() {
     try {
-      const payload = { name: form.name || undefined, email: form.email || undefined, phone: form.phone || undefined, category: form.category || undefined, paymentTerms: form.paymentTerms || undefined, active: form.active === "true" };
+      const payload = { supplierNumber: form.supplierNumber || undefined, name: form.name || undefined, contactPerson: form.contactPerson || undefined, email: form.email || undefined, phone: form.phone || undefined, address: form.address || undefined, vatNumber: form.vatNumber || undefined, registrationNumber: form.registrationNumber || undefined, bankInformation: form.bankInformation || undefined, notes: form.notes || undefined, category: form.category || undefined, paymentTerms: form.paymentTerms || undefined, active: form.active === "true" };
       if (form.id) {
         await apiFetch(`/accounting/vendors/${form.id}`, { method: "PATCH", body: JSON.stringify(payload) });
         notify("success", "Vendor updated successfully.");
@@ -1137,7 +1222,7 @@ export function LiveVendors() {
           <table className="min-w-full text-left">
             <thead className="border-b border-line bg-slate-50/70"><tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500"><th className="px-4 py-2.5 font-semibold">Vendor</th><th className="px-4 py-2.5 font-semibold">Category</th><th className="px-4 py-2.5 font-semibold">Terms</th><th className="px-4 py-2.5 font-semibold">Status</th><th className="px-4 py-2.5 text-right font-semibold">Actions</th></tr></thead>
             <tbody>
-              {filtered.map((vendor) => <tr key={vendor.id} className="border-b border-line transition hover:bg-soft/40"><td className="px-4 py-3"><div className="text-sm font-semibold text-ink">{vendor.name}</div><div className="text-xs text-slate-500">{vendor.email || "No email"}{vendor.phone ? ` • ${vendor.phone}` : ""}</div></td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{vendor.category || "General"}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{vendor.paymentTerms || "Standard"}</td><td className="px-4 py-3"><span className="rounded-full bg-soft px-2.5 py-1 text-[10px] font-semibold text-slate-700">{vendor.active ? "ACTIVE" : "INACTIVE"}</span></td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => { setForm({ id: vendor.id, name: vendor.name, email: vendor.email ?? "", phone: vendor.phone ?? "", category: vendor.category ?? "", paymentTerms: vendor.paymentTerms ?? "", active: vendor.active ? "true" : "false" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button><button onClick={() => setPendingDelete(vendor.id)} className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" /><span>Delete</span></button></div></td></tr>)}
+              {filtered.map((vendor) => <tr key={vendor.id} className="border-b border-line transition hover:bg-soft/40"><td className="px-4 py-3"><div className="text-sm font-semibold text-ink">{vendor.name}</div><div className="text-xs text-slate-500">{vendor.supplierNumber || "No supplier number"} · {vendor.email || "No email"}{vendor.phone ? ` • ${vendor.phone}` : ""}</div></td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{vendor.category || "General"}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{vendor.paymentTerms || "Standard"}</td><td className="px-4 py-3"><span className="rounded-full bg-soft px-2.5 py-1 text-[10px] font-semibold text-slate-700">{vendor.active ? "ACTIVE" : "INACTIVE"}</span></td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={() => { setForm({ id: vendor.id, supplierNumber: vendor.supplierNumber ?? "", name: vendor.name, contactPerson: vendor.contactPerson ?? "", email: vendor.email ?? "", phone: vendor.phone ?? "", address: vendor.address ?? "", vatNumber: vendor.vatNumber ?? "", registrationNumber: vendor.registrationNumber ?? "", bankInformation: vendor.bankInformation ?? "", notes: vendor.notes ?? "", category: vendor.category ?? "", paymentTerms: vendor.paymentTerms ?? "", active: vendor.active ? "true" : "false" }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button><button onClick={() => setPendingDelete(vendor.id)} className="inline-flex items-center gap-1 rounded-xl border border-rose-200 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50"><Trash2 className="h-3.5 w-3.5" /><span>Delete</span></button></div></td></tr>)}
               {filtered.length === 0 ? <tr><td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">No vendors match the current search.</td></tr> : null}
             </tbody>
           </table>
@@ -1328,7 +1413,7 @@ export function LiveChartOfAccounts() {
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
-        <TableHeader label="Chart of Accounts" title="Real account structure" description="Maintain the actual chart of accounts used by journals and reporting." count={filtered.length} addLabel="Add account" onAdd={() => { setForm(emptyAccount); setShowForm(true); }} search={search} setSearch={setSearch} searchPlaceholder="Search account code, name, category" />
+        <TableHeader label="Chart of Accounts" title="Real account structure" description="Maintain the actual chart of accounts used by journals and reporting." count={filtered.length} countLabel="accounts" addLabel="Add account" onAdd={() => { setForm(emptyAccount); setShowForm(true); }} search={search} setSearch={setSearch} searchPlaceholder="Search account code, name, category" />
         <div className="overflow-x-auto">
           <table className="min-w-full text-left">
             <thead className="border-b border-line bg-slate-50/70"><tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500"><th className="px-4 py-2.5 font-semibold">Code</th><th className="px-4 py-2.5 font-semibold">Name</th><th className="px-4 py-2.5 font-semibold">Category</th><th className="px-4 py-2.5 font-semibold">Balance Side</th><th className="px-4 py-2.5 text-right font-semibold">Actions</th></tr></thead>

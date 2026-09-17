@@ -88,7 +88,7 @@ export class OperationsController {
     const tenantId = await this.tenantId(slug);
     const pagination = this.pagination(page, pageSize); const where = { tenantId };
     const [items, total] = await Promise.all([
-      this.prisma.user.findMany({ where, select: { id: true, email: true, fullName: true, role: true, status: true, phone: true, lastLoginAt: true, createdAt: true }, orderBy: { fullName: "asc" }, skip: pagination.skip, take: pagination.take }),
+      this.prisma.user.findMany({ where, select: { id: true, email: true, fullName: true, role: true, status: true, phone: true, lastLoginAt: true, createdAt: true, employees: { select: { id: true, fullName: true, employeeNumber: true } } }, orderBy: { fullName: "asc" }, skip: pagination.skip, take: pagination.take }),
       this.prisma.user.count({ where }),
     ]);
     return { items, meta: this.pageMeta(pagination, total) };
@@ -173,10 +173,10 @@ export class OperationsController {
 
   @Post("assets")
   @RequiresPermission("assets.create")
-  async createAsset(@Tenant() slug: string, @Body() body: { assetTag?: string; name?: string; category?: string; serialNumber?: string; status?: string; purchasePrice?: number }) {
+  async createAsset(@Tenant() slug: string, @Body() body: { assetTag?: string; name?: string; category?: string; serialNumber?: string; status?: string; condition?: string; location?: string; purchasePrice?: number; manufacturer?: string; model?: string; department?: string; supplier?: string; purchaseDate?: string; warrantyExpiry?: string; notes?: string }) {
     const tenantId = await this.tenantId(slug);
     if (!body.assetTag || !body.name || !body.category) throw new BadRequestException("Asset tag, name, and category are required.");
-    const item = await this.prisma.asset.create({ data: { tenantId, assetTag: body.assetTag.trim(), name: body.name.trim(), category: body.category.trim(), serialNumber: body.serialNumber, status: body.status?.toUpperCase() ?? "AVAILABLE", purchasePrice: body.purchasePrice === undefined ? undefined : new Prisma.Decimal(body.purchasePrice) } });
+    const item = await this.prisma.asset.create({ data: { tenantId, assetTag: body.assetTag.trim(), name: body.name.trim(), category: body.category.trim(), serialNumber: body.serialNumber, manufacturer: body.manufacturer, model: body.model, department: body.department, supplier: body.supplier, location: body.location, purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : undefined, warrantyExpiry: body.warrantyExpiry ? new Date(body.warrantyExpiry) : undefined, notes: body.notes, status: body.status?.toUpperCase() ?? "AVAILABLE", condition: body.condition?.toUpperCase() ?? "GOOD", purchasePrice: body.purchasePrice === undefined ? undefined : new Prisma.Decimal(body.purchasePrice) } });
     await this.audit.record({ tenantId, action: "CREATE", entityType: "Asset", entityId: item.id, newValue: item });
     return { item };
   }
@@ -203,13 +203,28 @@ export class OperationsController {
     return { item, scanUrl, qrDataUrl: await QRCode.toDataURL(scanUrl, { errorCorrectionLevel: "M", margin: 2, width: 320 }) };
   }
 
+  @Post("attendance/employee-qr/:employeeId")
+  @RequiresPermission("attendance.manage")
+  async employeeAttendanceQr(@Tenant() slug: string, @Param("employeeId") employeeId: string) {
+    const tenantId = await this.tenantId(slug);
+    const employee = await this.prisma.employee.findFirst({ where: { id: employeeId, tenantId } });
+    if (!employee) throw new BadRequestException("Employee not found.");
+    const item = await this.prisma.employee.update({
+      where: { id: employee.id },
+      data: { attendanceQrToken: employee.attendanceQrToken ?? randomBytes(24).toString("base64url") },
+      select: { id: true, employeeNumber: true, fullName: true, attendanceQrToken: true },
+    });
+    const scanUrl = `${process.env.WEB_APP_URL || "http://localhost:3000"}/attendance/clock-in?workspace=${slug}&employeeQr=${item.attendanceQrToken}`;
+    return { item, scanUrl, qrDataUrl: await QRCode.toDataURL(scanUrl, { errorCorrectionLevel: "M", margin: 2, width: 420 }) };
+  }
+
   @Patch("assets/:id")
   @RequiresPermission("assets.create")
-  async updateAsset(@Tenant() slug: string, @Param("id") id: string, @Body() body: { name?: string; category?: string; status?: string; condition?: string; location?: string; notes?: string }) {
+  async updateAsset(@Tenant() slug: string, @Param("id") id: string, @Body() body: { name?: string; category?: string; status?: string; condition?: string; location?: string; department?: string; manufacturer?: string; model?: string; supplier?: string; purchaseDate?: string; warrantyExpiry?: string; notes?: string }) {
     const tenantId = await this.tenantId(slug);
     const existing = await this.prisma.asset.findFirst({ where: { id, tenantId } });
     if (!existing) throw new BadRequestException("Asset not found.");
-    return { item: await this.prisma.asset.update({ where: { id }, data: { name: body.name, category: body.category, status: body.status?.toUpperCase(), condition: body.condition, location: body.location, notes: body.notes } }) };
+    return { item: await this.prisma.asset.update({ where: { id }, data: { name: body.name, category: body.category, status: body.status?.toUpperCase(), condition: body.condition, location: body.location, department: body.department, manufacturer: body.manufacturer, model: body.model, supplier: body.supplier, purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : undefined, warrantyExpiry: body.warrantyExpiry ? new Date(body.warrantyExpiry) : undefined, notes: body.notes } }) };
   }
 
   @Post("assets/:id/assign")
@@ -320,14 +335,14 @@ export class OperationsController {
     } else if (resource === "cash-flow") {
       const [payments, expenses] = await Promise.all([
         this.prisma.payment.findMany({ where: { invoice: { tenantId }, receivedAt: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, select: { amount: true } }),
-        this.prisma.expense.findMany({ where: { tenantId, status: { in: ["APPROVED", "PAID"] }, incurredAt: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, select: { amount: true } }),
+        this.prisma.expense.findMany({ where: { tenantId, status: { in: ["APPROVED", "PAID"] }, incurredAt: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, select: { amount: true, taxAmount: true } }),
       ]);
       const inflow = payments.reduce((sum, item) => sum + Number(item.amount), 0); const outflow = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
       rows = [{ metric: "inflow", value: inflow }, { metric: "outflow", value: outflow }, { metric: "net", value: inflow - outflow }];
     } else if (resource === "vat") {
       const [invoices, expenses] = await Promise.all([
         this.prisma.invoice.findMany({ where: { tenantId, status: { not: "VOID" }, issuedAt: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, select: { subtotal: true, taxAmount: true } }),
-        this.prisma.expense.findMany({ where: { tenantId, status: { in: ["APPROVED", "PAID"] }, incurredAt: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, select: { amount: true } }),
+        this.prisma.expense.findMany({ where: { tenantId, status: { in: ["APPROVED", "PAID"] }, incurredAt: { gte: from ? new Date(from) : undefined, lte: to ? new Date(to) : undefined } }, select: { amount: true, taxAmount: true } }),
       ]);
       const outputBase = invoices.reduce((sum, item) => sum + Number(item.subtotal), 0); const outputTax = invoices.reduce((sum, item) => sum + Number(item.taxAmount), 0); const inputBase = expenses.reduce((sum, item) => sum + Number(item.amount), 0); const inputTax = expenses.reduce((sum, item) => sum + Number(item.taxAmount), 0);
       rows = [{ metric: "outputBase", value: outputBase }, { metric: "outputTax", value: outputTax }, { metric: "inputBase", value: inputBase }, { metric: "inputTax", value: inputTax }, { metric: "netTax", value: outputTax - inputTax }];
@@ -450,11 +465,13 @@ export class OperationsController {
   private timeToMinutes(value: string) { const [hours, minutes] = value.split(":").map(Number); return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0); }
 
   @Post("attendance/clock-in")
-  async clockIn(@Tenant() slug: string, @Req() request: { user: { sub: string }; ip?: string; headers: Record<string, string | undefined> }, @Body() body: { location?: string; method?: string; qrToken?: string }) {
+  async clockIn(@Tenant() slug: string, @Req() request: { user: { sub: string }; ip?: string; headers: Record<string, string | undefined> }, @Body() body: { location?: string; method?: string; qrToken?: string; employeeQrToken?: string }) {
     const tenantId = await this.tenantId(slug);
-    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { attendanceQrToken: true } });
-    if (body.method?.toUpperCase() === "QR" && (!body.qrToken || body.qrToken !== tenant?.attendanceQrToken)) throw new BadRequestException("Invalid organisation attendance QR code.");
-    const employee = await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub, employmentStatus: "ACTIVE" } });
+    const employeeQrToken = body.employeeQrToken || body.qrToken;
+    const employee = employeeQrToken
+      ? await this.prisma.employee.findFirst({ where: { tenantId, attendanceQrToken: employeeQrToken, employmentStatus: "ACTIVE" } })
+      : await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub, employmentStatus: "ACTIVE" } });
+    if (body.method?.toUpperCase() === "QR" && !employee) throw new BadRequestException("Invalid employee attendance QR code.");
     if (!employee) throw new BadRequestException("An active employee profile is required to clock in.");
     const now = new Date();
     const day = new Date(now); day.setHours(0, 0, 0, 0);

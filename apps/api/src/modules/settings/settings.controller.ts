@@ -1,4 +1,6 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { memoryStorage } from "multer";
 import { UserRole } from "@prisma/client";
 import { AuthService } from "../auth/auth.service";
 import { Tenant } from "../../common/decorators/tenant.decorator";
@@ -7,16 +9,19 @@ import { TenantService } from "../../common/services/tenant.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { PermissionGuard } from "../../common/guards/permission.guard";
 import { RequiresPermission } from "../../common/decorators/permission.decorator";
+import { StorageService } from "../../common/services/storage.service";
+import { randomBytes } from "node:crypto";
 
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @Controller("settings")
 export class SettingsController {
-  private readonly allowedModules = ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"] as const;
+  private readonly allowedModules = ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"] as const;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantService: TenantService,
     private readonly authService: AuthService,
+    private readonly storage: StorageService,
   ) {}
 
   private normalizeRole(role?: string): UserRole {
@@ -72,19 +77,23 @@ export class SettingsController {
   private roleScope(role: UserRole) {
     switch (role) {
       case "OWNER":
-        return { crm: "Full", accounting: "Full", hr: "Full", forms: "Full", automation: "Full", settings: "Full" };
+        return { crm: "Full", accounting: "Full", hr: "Full", attendance: "Full", assets: "Full", projects: "Full", users: "Full", settings: "Full" };
       case "ADMIN":
-        return { crm: "Full", accounting: "Edit", hr: "Edit", forms: "Edit", automation: "Edit", settings: "Edit" };
+        return { crm: "Full", accounting: "Edit", hr: "Edit", attendance: "Edit", assets: "Edit", projects: "Edit", users: "Edit", settings: "Edit" };
       case "SALES_MANAGER":
-        return { crm: "Full", accounting: "Read", hr: "None", forms: "Read", automation: "Read", settings: "None" };
+        return { crm: "Full", accounting: "Read", hr: "None", attendance: "None", assets: "None", projects: "Read", users: "None", settings: "None" };
       case "ACCOUNTANT":
-        return { crm: "Read", accounting: "Full", hr: "Read", forms: "Read", automation: "Read", settings: "None" };
+        return { crm: "Read", accounting: "Full", hr: "Read", attendance: "Read", assets: "None", projects: "None", users: "None", settings: "None" };
       case "HR_MANAGER":
-        return { crm: "Read", accounting: "Read", hr: "Full", forms: "Read", automation: "Read", settings: "None" };
+        return { crm: "Read", accounting: "Read", hr: "Full", attendance: "Full", assets: "None", projects: "None", users: "Read", settings: "None" };
+      case "PROJECT_MANAGER":
+        return { crm: "Read", accounting: "Read", hr: "Read", attendance: "Read", assets: "Edit", projects: "Full", users: "None", settings: "None" };
+      case "IT_MANAGER":
+        return { crm: "Read", accounting: "Read", hr: "Read", attendance: "Read", assets: "Full", projects: "Read", users: "Full", settings: "Full" };
       case "AGENT":
-        return { crm: "Edit", accounting: "None", hr: "Self", forms: "Read", automation: "None", settings: "None" };
+        return { crm: "Edit", accounting: "None", hr: "Self", attendance: "Self", assets: "None", projects: "Read", users: "None", settings: "None" };
       default:
-        return { crm: "Read", accounting: "None", hr: "Self", forms: "Read", automation: "None", settings: "None" };
+        return { crm: "Read", accounting: "None", hr: "Self", attendance: "Self", assets: "None", projects: "Read", users: "None", settings: "None" };
     }
   }
 
@@ -321,6 +330,20 @@ export class SettingsController {
     };
   }
 
+  @Post("logo")
+  @RequiresPermission("settings.manage")
+  @UseInterceptors(FileInterceptor("logo", { storage: memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } }))
+  async uploadLogo(@Tenant() tenantId: string, @UploadedFile() file?: { buffer: Buffer; originalname: string; mimetype: string }) {
+    if (!file) throw new BadRequestException("Please select a logo image.");
+    if (!file.mimetype.startsWith("image/")) throw new BadRequestException("Logo must be an image file.");
+
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    const fileKey = await this.storage.put({ buffer: file.buffer, originalName: file.originalname, mimeType: file.mimetype });
+    const logoUrl = fileKey.startsWith("http") ? fileKey : `${process.env.APP_BASE_URL || "http://localhost:4000"}${fileKey}`;
+    await this.prisma.tenant.update({ where: { id: tenant.id }, data: { logoUrl } });
+    return { logoUrl };
+  }
+
   @Post("team")
   @RequiresPermission("users.manage")
   async createTeamMember(
@@ -331,11 +354,15 @@ export class SettingsController {
       fullName?: string;
       role?: string;
       password?: string;
+      employeeId?: string | null;
     },
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
-    if (!body.email?.trim() || !body.fullName?.trim() || !body.password || body.password.length < 10) throw new BadRequestException("Full name, email, and a password of at least 10 characters are required.");
-    const password = body.password;
+    if (!body.email?.trim() || !body.fullName?.trim()) throw new BadRequestException("Full name and email are required.");
+    const employee = body.employeeId ? await this.prisma.employee.findFirst({ where: { id: body.employeeId, tenantId: tenant.id } }) : null;
+    if (body.employeeId && !employee) throw new BadRequestException("Selected employee was not found in this workspace.");
+    if (employee?.userId) throw new BadRequestException("This employee is already linked to another login.");
+    const password = body.password?.trim() || randomBytes(8).toString("base64url").replace(/[^A-Za-z0-9]/g, "").slice(0, 6);
     const item = await this.prisma.user.create({
       data: {
         tenantId: tenant.id,
@@ -345,6 +372,7 @@ export class SettingsController {
         passwordHash: this.authService.hashPassword(password),
       },
     });
+    if (employee) await this.prisma.employee.update({ where: { id: employee.id }, data: { userId: item.id } });
     await this.prisma.auditLog.create({
       data: {
         tenantId: tenant.id,
@@ -364,7 +392,7 @@ export class SettingsController {
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       },
-      generatedPassword: null,
+      generatedPassword: body.password ? null : password,
     };
   }
 
@@ -379,6 +407,7 @@ export class SettingsController {
       fullName?: string;
       role?: string;
       password?: string;
+      employeeId?: string | null;
     },
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
@@ -387,6 +416,13 @@ export class SettingsController {
     });
     if (!existing) {
       return { status: "missing", userId };
+    }
+    const employee = body.employeeId ? await this.prisma.employee.findFirst({ where: { id: body.employeeId, tenantId: tenant.id } }) : null;
+    if (body.employeeId && !employee) throw new BadRequestException("Selected employee was not found in this workspace.");
+    if (employee?.userId && employee.userId !== existing.id) throw new BadRequestException("This employee is already linked to another login.");
+    if (body.employeeId !== undefined) {
+      await this.prisma.employee.updateMany({ where: { userId: existing.id, tenantId: tenant.id }, data: { userId: null } });
+      if (employee) await this.prisma.employee.update({ where: { id: employee.id }, data: { userId: existing.id } });
     }
     const item = await this.prisma.user.update({
       where: { id: userId },
@@ -429,6 +465,7 @@ export class SettingsController {
     if (!existing) {
       return { status: "missing", userId };
     }
+    await this.prisma.employee.updateMany({ where: { userId, tenantId: tenant.id }, data: { userId: null } });
     await this.prisma.user.delete({ where: { id: userId } });
     await this.prisma.auditLog.create({
       data: {

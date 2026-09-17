@@ -21,13 +21,13 @@ export class AuthService {
       trialDays: 14,
     },
     growth: {
-      enabledModules: ["crm", "accounting", "forms", "automation", "settings"],
+      enabledModules: ["crm", "accounting", "settings"],
       maxUsers: 50,
       maxStorageGb: 50,
       trialDays: 14,
     },
     enterprise: {
-      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"],
+      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"],
       maxUsers: 250,
       maxStorageGb: 250,
       trialDays: 30,
@@ -244,6 +244,19 @@ export class AuthService {
       slug: normalizedSlug,
       available: !existing,
       message: existing ? "Workspace slug is already taken." : "Workspace slug is available.",
+    };
+  }
+
+  async workspaceBranding(slug: string) {
+    const normalizedSlug = this.slugify(slug || "demo-tenant");
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: normalizedSlug },
+      select: { name: true, logoUrl: true },
+    });
+
+    return {
+      name: tenant?.name || "Pop In Solutions",
+      logoUrl: tenant?.logoUrl || null,
     };
   }
 

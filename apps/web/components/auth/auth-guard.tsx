@@ -56,7 +56,7 @@ export function AuthGuard({ children, onResolved }: AuthGuardProps) {
           role: me.role,
           tenantId: me.tenantId,
           tenantName: me.tenantName,
-          enabledModules: me.enabledModules ?? activeSession.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"],
+          enabledModules: me.enabledModules ?? activeSession.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"],
         };
 
         storeSession(resolvedSession);

@@ -73,6 +73,13 @@ export class CrmController {
       }
       return;
     }
+    if (entityType === "activity") {
+      const item = await this.prisma.activity.findFirst({ where: { tenantId, id: entityId } });
+      if (!item) {
+        throw new BadRequestException("Activity not found for attachment.");
+      }
+      return;
+    }
     const tenantScopedEntities: Record<string, (tenantId: string, entityId: string) => Promise<unknown>> = {
       employee: (tenantId, entityId) => this.prisma.employee.findFirst({ where: { tenantId, id: entityId } }),
       asset: (tenantId, entityId) => this.prisma.asset.findFirst({ where: { tenantId, id: entityId } }),
@@ -406,6 +413,11 @@ export class CrmController {
       currency?: string;
       stage?: string;
       companyId?: string;
+      caseType?: string;
+      caseNumber?: string;
+      courtName?: string;
+      nextHearingDate?: string;
+      caseNotes?: string;
     },
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
@@ -422,6 +434,11 @@ export class CrmController {
         amount: new Prisma.Decimal(body.amount),
         currency: body.currency ?? "ZAR",
         stage: this.normalizeStage(body.stage),
+        caseType: body.caseType ?? "COURT",
+        caseNumber: body.caseNumber || null,
+        courtName: body.courtName || null,
+        nextHearingDate: body.nextHearingDate ? new Date(body.nextHearingDate) : null,
+        caseNotes: body.caseNotes || null,
       },
     });
     return { status: "created", item: deal };
@@ -439,6 +456,11 @@ export class CrmController {
       currency?: string;
       stage?: string;
       companyId?: string | null;
+      caseType?: string;
+      caseNumber?: string | null;
+      courtName?: string | null;
+      nextHearingDate?: string | null;
+      caseNotes?: string | null;
     },
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
@@ -456,6 +478,11 @@ export class CrmController {
         currency: body.currency ?? undefined,
         stage: body.stage ? this.normalizeStage(body.stage) : undefined,
         companyId: body.companyId === "" ? null : body.companyId ?? undefined,
+        caseType: body.caseType ?? undefined,
+        caseNumber: body.caseNumber === "" ? null : body.caseNumber ?? undefined,
+        courtName: body.courtName === "" ? null : body.courtName ?? undefined,
+        nextHearingDate: body.nextHearingDate === "" ? null : body.nextHearingDate ? new Date(body.nextHearingDate) : undefined,
+        caseNotes: body.caseNotes === "" ? null : body.caseNotes ?? undefined,
       },
     });
     return { status: "updated", item };

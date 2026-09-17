@@ -15,7 +15,7 @@ async function main() {
     create: {
       name: "Pop In Solutions",
       slug: "demo-tenant",
-      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"],
+      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"],
       planCode: "enterprise",
       subscriptionStatus: "active",
       onboardingCompleted: true,
@@ -47,7 +47,7 @@ async function main() {
   await prisma.tenant.update({
     where: { id: tenant.id },
     data: {
-      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "forms", "automation", "settings"],
+      enabledModules: ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"],
       planCode: "enterprise",
       subscriptionStatus: "active",
       onboardingCompleted: true,
@@ -102,7 +102,6 @@ async function main() {
     "accounting.invoices.create", "accounting.invoices.approve", "hr.employees.view", "hr.employees.edit",
     "attendance.view", "attendance.manage", "assets.view", "assets.create", "assets.assign", "assets.return",
     "projects.view", "projects.manage", "users.view", "users.manage", "reports.view", "settings.manage",
-    "forms.manage", "automation.manage",
   ];
   for (const key of permissionKeys) {
     await prisma.permission.upsert({ where: { tenantId_key: { tenantId: tenant.id, key } }, update: {}, create: { tenantId: tenant.id, key } });

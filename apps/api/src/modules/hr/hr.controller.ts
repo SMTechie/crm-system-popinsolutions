@@ -1,7 +1,9 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { randomBytes } from "node:crypto";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { LeaveStatus } from "@prisma/client";
+import PDFDocument from "pdfkit";
 import { ModuleAccess } from "../../common/decorators/module-access.decorator";
 import { Tenant } from "../../common/decorators/tenant.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -41,6 +43,20 @@ export class HrController {
     if (value === undefined) return undefined;
     if (value === null || value === "") return null;
     return value;
+  }
+
+  private calculatePayrollDeductions(lines: Array<{ name?: string; mode?: string; value?: string | number }> | undefined, gross: number) {
+    if (!lines) return null;
+    const items = lines.map((line) => {
+      const name = line.name?.trim();
+      const mode = line.mode?.toUpperCase() === "PERCENT" ? "PERCENT" : "AMOUNT";
+      const value = Number(this.parseDecimal(line.value) ?? 0);
+      if (!name || value < 0 || (mode === "PERCENT" && value > 100)) throw new BadRequestException("Each deduction needs a name and a valid amount or percentage.");
+      return { name, mode, value, amount: mode === "PERCENT" ? gross * value / 100 : value };
+    });
+    const total = items.reduce((sum, item) => sum + item.amount, 0);
+    if (total > gross) throw new BadRequestException("Total deductions cannot exceed gross pay.");
+    return { items, total };
   }
 
   private parseDecimal(value?: string | number | null) {
@@ -112,7 +128,17 @@ export class HrController {
     const tenant = await this.tenantService.ensureTenant(tenantId);
     const pagination = this.pagination(page, pageSize); const where = { tenantId: tenant.id };
     const [items, total] = await Promise.all([this.prisma.employee.findMany({ where, include: { _count: { select: { leaveRequests: true, documents: true, attendanceRecords: true, payrollRuns: true, performanceReviews: true } } }, orderBy: { createdAt: "desc" }, skip: pagination.skip, take: pagination.take }), this.prisma.employee.count({ where })]);
-    return { tenantId: tenant.slug, items, meta: { page: pagination.page, pageSize: pagination.pageSize, total, pageCount: Math.ceil(total / pagination.pageSize) } };
+    const employeesWithQr = await Promise.all(
+      items.map((item) => item.attendanceQrToken
+        ? item
+        : this.prisma.employee.update({
+            where: { id: item.id },
+            data: { attendanceQrToken: randomBytes(24).toString("base64url") },
+            include: { _count: { select: { leaveRequests: true, documents: true, attendanceRecords: true, payrollRuns: true, performanceReviews: true } } },
+          }),
+      ),
+    );
+    return { tenantId: tenant.slug, items: employeesWithQr, meta: { page: pagination.page, pageSize: pagination.pageSize, total, pageCount: Math.ceil(total / pagination.pageSize) } };
   }
 
   @Post("employees")
@@ -152,6 +178,7 @@ export class HrController {
     const item = await this.prisma.employee.create({
       data: {
         tenantId: tenant.id,
+        attendanceQrToken: randomBytes(24).toString("base64url"),
         employeeNumber: body.employeeNumber || await this.nextEmployeeNumber(tenant.id),
         fullName: body.fullName.trim(),
         email: body.email.trim().toLowerCase(),
@@ -389,9 +416,9 @@ export class HrController {
 
   @Get("attendance")
   @RequiresPermission("attendance.view")
-  async attendance(@Tenant() tenantId: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
+  async attendance(@Tenant() tenantId: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string, @Query("employeeId") employeeId?: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
-    const pagination = this.pagination(page, pageSize); const where = { employee: { tenantId: tenant.id } };
+    const pagination = this.pagination(page, pageSize); const where = { employee: { tenantId: tenant.id, ...(employeeId ? { id: employeeId } : {}) } };
     const [items, total] = await Promise.all([this.prisma.attendanceRecord.findMany({
       where,
       include: { employee: true },
@@ -503,7 +530,7 @@ export class HrController {
     const pagination = this.pagination(page, pageSize); const where = { employee: { tenantId: tenant.id } };
     const [items, total] = await Promise.all([this.prisma.payrollRun.findMany({
       where,
-      include: { employee: true },
+      include: { employee: true, deductionItems: true },
       orderBy: [{ payDate: "desc" }, { createdAt: "desc" }],
       skip: pagination.skip, take: pagination.take,
     }), this.prisma.payrollRun.count({ where })]);
@@ -522,6 +549,7 @@ export class HrController {
       grossAmount?: string | number;
       deductions?: string | number;
       netAmount?: string | number;
+      deductionItems?: Array<{ name?: string; mode?: string; value?: string | number }>;
       status?: string;
       notes?: string;
     },
@@ -535,8 +563,10 @@ export class HrController {
       return { status: "missing-employee" };
     }
     const grossAmount = Number(this.parseDecimal(body.grossAmount) ?? 0);
-    const deductions = Number(this.parseDecimal(body.deductions) ?? 0);
-    const netAmount = body.netAmount === undefined ? grossAmount - deductions : Number(this.parseDecimal(body.netAmount) ?? 0);
+    const calculatedDeductions = this.calculatePayrollDeductions(body.deductionItems, grossAmount);
+    const deductions = calculatedDeductions?.total ?? Number(this.parseDecimal(body.deductions) ?? 0);
+    if (grossAmount < 0 || deductions < 0 || deductions > grossAmount) throw new BadRequestException("Gross pay and deductions must be valid, and deductions cannot exceed gross pay.");
+    const netAmount = grossAmount - deductions;
     const item = await this.prisma.payrollRun.create({
       data: {
         employeeId: employee.id,
@@ -547,8 +577,9 @@ export class HrController {
         netAmount,
         status: body.status ?? "DRAFT",
         notes: this.normalizeText(body.notes),
+        ...(calculatedDeductions ? { deductionItems: { create: calculatedDeductions.items } } : {}),
       },
-      include: { employee: true },
+      include: { employee: true, deductionItems: true },
     });
     return { status: "created", item };
   }
@@ -566,6 +597,7 @@ export class HrController {
       grossAmount?: string | number | null;
       deductions?: string | number | null;
       netAmount?: string | number | null;
+      deductionItems?: Array<{ name?: string; mode?: string; value?: string | number }>;
       status?: string;
       notes?: string | null;
     },
@@ -579,8 +611,12 @@ export class HrController {
     }
     const employee = body.employeeId ? await this.resolveEmployee(tenant.id, body.employeeId) : null;
     const grossAmount = body.grossAmount === undefined ? undefined : Number(this.parseDecimal(body.grossAmount) ?? 0);
-    const deductions = body.deductions === undefined ? undefined : Number(this.parseDecimal(body.deductions) ?? 0);
-    const netAmount = body.netAmount === undefined ? undefined : Number(this.parseDecimal(body.netAmount) ?? 0);
+    const calculatedDeductions = this.calculatePayrollDeductions(body.deductionItems, grossAmount ?? Number(existing.grossAmount));
+    const deductions = calculatedDeductions?.total ?? (body.deductions === undefined ? undefined : Number(this.parseDecimal(body.deductions) ?? 0));
+    if ((grossAmount !== undefined && grossAmount < 0) || (deductions !== undefined && deductions < 0)) throw new BadRequestException("Gross pay and deductions cannot be negative.");
+    if (grossAmount !== undefined && deductions !== undefined && deductions > grossAmount) throw new BadRequestException("Deductions cannot exceed gross pay.");
+    const calculatedNet = grossAmount !== undefined || deductions !== undefined ? (grossAmount ?? Number(existing.grossAmount)) - (deductions ?? Number(existing.deductions)) : undefined;
+    const netAmount = calculatedNet === undefined ? undefined : calculatedNet;
 
     const item = await this.prisma.payrollRun.update({
       where: { id: payrollRunId },
@@ -593,10 +629,55 @@ export class HrController {
         netAmount,
         status: body.status ?? undefined,
         notes: this.normalizeText(body.notes),
+        ...(calculatedDeductions ? { deductionItems: { deleteMany: {}, create: calculatedDeductions.items } } : {}),
       },
-      include: { employee: true },
+      include: { employee: true, deductionItems: true },
     });
     return { status: "updated", item };
+  }
+
+  @Get("payroll-runs/:payrollRunId/payslip")
+  @RequiresPermission("hr.employees.view")
+  async payrollPayslip(
+    @Tenant() tenantId: string,
+    @Param("payrollRunId") payrollRunId: string,
+    @Res() response: { setHeader: (name: string, value: string) => void; end: (body: Buffer) => void },
+  ) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    const payroll = await this.prisma.payrollRun.findFirst({ where: { id: payrollRunId, employee: { tenantId: tenant.id } }, include: { employee: true, deductionItems: true } });
+    if (!payroll) throw new BadRequestException("Payroll run not found.");
+    let logoBuffer: Buffer | null = null;
+    if (tenant.logoUrl) {
+      try { const logoResponse = await fetch(tenant.logoUrl); if (logoResponse.ok) logoBuffer = Buffer.from(await logoResponse.arrayBuffer()); } catch { logoBuffer = null; }
+    }
+    const chunks: Buffer[] = [];
+    const document = new PDFDocument({ size: "A4", margin: 52 });
+    document.on("data", (chunk: Buffer) => chunks.push(chunk));
+    await new Promise<void>((resolve, reject) => {
+      document.on("end", resolve);
+      document.on("error", reject);
+      if (logoBuffer) document.image(logoBuffer, 52, 48, { fit: [82, 54] });
+      document.fontSize(22).fillColor("#172554").text(tenant.name, { align: "right" });
+      document.moveDown(1.5).fontSize(20).fillColor("#111827").text("PAYSLIP", { align: "left" });
+      document.fontSize(10).fillColor("#64748b").text(`${payroll.periodLabel}  •  Pay date: ${payroll.payDate.toISOString().slice(0, 10)}`);
+      document.moveDown().roundedRect(52, document.y, 491, 82, 10).fillAndStroke("#f8fafc", "#dbe4f0");
+      document.fillColor("#111827").fontSize(13).text(payroll.employee.fullName, 70, document.y + 18);
+      document.fontSize(10).fillColor("#64748b").text(payroll.employee.title || "Employee", 70, document.y + 4);
+      if (payroll.employee.employeeNumber) document.text(`Employee number: ${payroll.employee.employeeNumber}`, 70, document.y + 3);
+      document.moveDown(4).fillColor("#64748b").fontSize(10).text("EARNINGS AND DEDUCTIONS");
+      document.moveTo(52, document.y + 6).lineTo(543, document.y + 6).strokeColor("#dbe4f0").stroke();
+      document.moveDown(1).fillColor("#111827").fontSize(11).text("Gross pay", { continued: true }).text(`ZAR ${Number(payroll.grossAmount).toFixed(2)}`, { align: "right" });
+      for (const deduction of payroll.deductionItems) document.fontSize(10).fillColor("#be123c").text(`${deduction.name}${deduction.mode === "PERCENT" ? ` (${Number(deduction.value).toFixed(2)}%)` : ""}`, { continued: true }).text(`- ZAR ${Number(deduction.amount).toFixed(2)}`, { align: "right" });
+      document.fontSize(11).fillColor("#be123c").text("Total deductions", { continued: true }).text(`- ZAR ${Number(payroll.deductions).toFixed(2)}`, { align: "right" });
+      document.moveDown().strokeColor("#dbe4f0").moveTo(52, document.y).lineTo(543, document.y).stroke();
+      document.moveDown().fontSize(15).fillColor("#1d4ed8").text("Net pay", { continued: true }).text(`ZAR ${Number(payroll.netAmount).toFixed(2)}`, { align: "right" });
+      if (payroll.notes) document.moveDown(2).fontSize(10).fillColor("#475569").text(`Notes: ${payroll.notes}`);
+      document.moveDown(3).fontSize(9).fillColor("#94a3b8").text("This payslip is an official payroll record generated by the workspace.", { align: "center" });
+      document.end();
+    });
+    response.setHeader("Content-Type", "application/pdf");
+    response.setHeader("Content-Disposition", `attachment; filename=payslip-${payroll.employee.fullName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${payroll.payDate.toISOString().slice(0, 10)}.pdf`);
+    response.end(Buffer.concat(chunks));
   }
 
   @Delete("payroll-runs/:payrollRunId")

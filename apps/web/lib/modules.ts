@@ -1,6 +1,6 @@
 import { moduleCards, type ModuleCard } from "@/lib/data";
 
-export type ModuleKey = "crm" | "accounting" | "hr" | "attendance" | "assets" | "projects" | "users" | "forms" | "automation" | "settings";
+export type ModuleKey = "crm" | "accounting" | "hr" | "attendance" | "assets" | "projects" | "users" | "settings";
 
 const routeToModuleKey: Array<{ prefix: string; key: ModuleKey }> = [
   { prefix: "/crm", key: "crm" },
@@ -10,8 +10,6 @@ const routeToModuleKey: Array<{ prefix: string; key: ModuleKey }> = [
   { prefix: "/assets", key: "assets" },
   { prefix: "/projects", key: "projects" },
   { prefix: "/settings/team", key: "users" },
-  { prefix: "/forms", key: "forms" },
-  { prefix: "/automation", key: "automation" },
   { prefix: "/settings", key: "settings" },
 ];
 
