@@ -33,7 +33,7 @@ See [docs/implementation-status.md](docs/implementation-status.md) for database 
 
 ## Deploying to Vercel
 
-Deploy the repository root as a Next.js project. The root `vercel.json` uses the root `next` build directly, so no Vercel Root Directory override is needed.
+Deploy the repository root as a Next.js project. The root `vercel.json` uses the root `next` build directly and exposes the NestJS API through the Vercel catch-all function at `/api/*`.
 
 Set this required Vercel environment variable for Production, Preview, and Development:
 
@@ -41,6 +41,6 @@ Set this required Vercel environment variable for Production, Preview, and Devel
 NEXT_PUBLIC_API_URL=https://your-api-domain.example.com/api/v1
 ```
 
-Deploy `apps/api` separately as a Node/Docker service. Configure its `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `WEB_APP_URL` (the Vercel URL), `APP_BASE_URL` (the API URL), and production object storage variables. Do not use local file storage in production. Add the Vercel domain to the API CORS configuration through `WEB_APP_URL`.
+For the unified Vercel deployment, configure the API variables in the same Vercel project: `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `WEB_APP_URL` (the Vercel URL), `APP_BASE_URL` (the same Vercel URL), and production object storage variables. Do not use local file storage in production. The API Dockerfile remains available for a separate Node/Docker deployment if required.
 
 The web production build can be verified locally with `npm run build`; the API build uses `npm run build:api`.
