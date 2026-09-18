@@ -12,5 +12,8 @@
     "build": "npm run build -w apps/web && npm run build -w apps/api",
     "lint": "npm run lint -w apps/web && npm run lint -w apps/api",
     "test": "npm run test -w apps/api"
+  },
+  "devDependencies": {
+    "next": "^16.3.3"
   }
 }

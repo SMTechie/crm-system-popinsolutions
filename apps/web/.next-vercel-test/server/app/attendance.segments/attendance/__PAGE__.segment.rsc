@@ -1,0 +1,25 @@
+1:"$Sreact.fragment"
+2:I[10384,["/_next/static/chunks/2i6qagr-n9fra.js","/_next/static/chunks/28uclf1_yjnlc.js","/_next/static/chunks/3vv9ay8p3phj5.js"],"AppShell"]
+3:I[16648,["/_next/static/chunks/2i6qagr-n9fra.js","/_next/static/chunks/28uclf1_yjnlc.js","/_next/static/chunks/3vv9ay8p3phj5.js"],"LiveAttendance"]
+4:I[16648,["/_next/static/chunks/2i6qagr-n9fra.js","/_next/static/chunks/28uclf1_yjnlc.js","/_next/static/chunks/3vv9ay8p3phj5.js"],"LiveAttendanceReport"]
+5:I[97367,["/_next/static/chunks/2i6qagr-n9fra.js"],"OutletBoundary"]
+6:"$Sreact.suspense"
+a:I[97367,["/_next/static/chunks/2i6qagr-n9fra.js"],"ViewportBoundary"]
+b:I[97367,["/_next/static/chunks/2i6qagr-n9fra.js"],"MetadataBoundary"]
+d:I[39756,["/_next/static/chunks/2i6qagr-n9fra.js"],"default"]
+e:I[37457,["/_next/static/chunks/2i6qagr-n9fra.js"],"default"]
+11:I[55329,["/_next/static/chunks/2i6qagr-n9fra.js"],"PwaRegister"]
+:HL["/_next/static/chunks/3lp9ggh-2l_6k.css","style"]
+9:X
+10:X
+10:C
+0:{"buildId":"XVZjEZpHvRdbMLS7i4dLj","data":[{"rsc":["$","$1","c",{"children":[["$","$L2",null,{"title":"Attendance","description":"Clock-in, clock-out, schedules, and attendance reporting.","children":["$","div",null,{"className":"space-y-5","children":[["$","$L3",null,{}],["$","$L4",null,{}]]}]}],[["$","script","script-0",{"src":"/_next/static/chunks/28uclf1_yjnlc.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/3vv9ay8p3phj5.js","async":true}]],["$","$L5",null,{"children":["$","$6",null,{"name":"Next.MetadataOutlet","children":"$@7"}]}]]}],"isPartial":"$@8","staleTime":"$9","varyParams":null},{"rsc":["$","$1","h",{"children":[null,["$","$La",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","div",null,{"hidden":true,"children":["$","$Lb",null,{"children":["$","$6",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Pop In Solutions CRM"}],["$","meta","1",{"name":"description","content":"Modular enterprise CRM platform for Pop In Solutions"}],["$","link","2",{"rel":"manifest","href":"/manifest.webmanifest"}]]}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"isPartial":"$@c","staleTime":"$9","varyParams":null},{"rsc":["$","$1","c",{"children":[null,["$","$Ld",null,{"parallelRouterKey":"children","template":["$","$Le",null,{}]}]]}],"isPartial":"$@f","staleTime":"$9","varyParams":"$10"},{"rsc":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/3lp9ggh-2l_6k.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/2i6qagr-n9fra.js","async":true}]],["$","html",null,{"lang":"en","suppressHydrationWarning":true,"children":["$","body",null,{"className":"plus_jakarta_sans_9e765dc7-module__xP80SG__variable","children":[["$","$L11",null,{}],["$","$Ld",null,{"parallelRouterKey":"children","template":["$","$Le",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]]}]]}]}]]}],"isPartial":"$@12","staleTime":"$9","varyParams":null}],"isUpgradeableISRFallback":false,"a":"$@13","rootVaryParams":null,"needsRuntimeRequest":"$@14"}
+7:null
+9:300
+14:true
+9:C
+13:0
+c:"$undefined"
+f:"$undefined"
+12:"$undefined"
+8:"$undefined"
