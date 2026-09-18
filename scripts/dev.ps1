@@ -1,8 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$nodeExe = (Get-Command node -ErrorAction Stop).Source
-$npmCli = Join-Path (Split-Path $nodeExe) "node_modules\npm\bin\npm-cli.js"
+$apiRoot = Join-Path $projectRoot "apps\api"
 
-Start-Process -FilePath $nodeExe -ArgumentList @($npmCli, "run", "dev:api") -WorkingDirectory $projectRoot -WindowStyle Hidden
-& $nodeExe $npmCli run dev:web
+Start-Process -FilePath "cmd.exe" -ArgumentList @("/d", "/c", "call npm run start:dev") -WorkingDirectory $apiRoot -WindowStyle Hidden
+npm run dev:web

@@ -67,6 +67,17 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
   }, [user?.token]);
 
   useEffect(() => {
+    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]') ?? document.createElement("link");
+    favicon.rel = "icon";
+    favicon.href = workspaceLogo || "/icon.svg";
+    if (!favicon.parentElement) document.head.appendChild(favicon);
+    const appleIcon = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]') ?? document.createElement("link");
+    appleIcon.rel = "apple-touch-icon";
+    appleIcon.href = workspaceLogo || "/icon.svg";
+    if (!appleIcon.parentElement) document.head.appendChild(appleIcon);
+  }, [workspaceLogo]);
+
+  useEffect(() => {
     function handleClick(event: MouseEvent) {
       const target = event.target as Node;
       if (notificationsRef.current && !notificationsRef.current.contains(target)) {

@@ -16,6 +16,32 @@ import { NotificationsService } from "./notifications.service";
 export class OperationsController {
   constructor(private readonly prisma: PrismaService, private readonly audit: AuditService, private readonly notificationService: NotificationsService) {}
 
+  private parseCoordinates(value?: string) {
+    const [latitude, longitude] = (value || "").split(",").map((item) => Number(item.trim()));
+    return Number.isFinite(latitude) && Number.isFinite(longitude) && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180 ? { latitude, longitude } : null;
+  }
+
+  private distanceMeters(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+    const earthRadius = 6371000; const lat1 = (a.latitude * Math.PI) / 180; const lat2 = (b.latitude * Math.PI) / 180;
+    const dLat = ((b.latitude - a.latitude) * Math.PI) / 180; const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+    const value = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    return earthRadius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+  }
+
+  private async validateAttendanceLocation(tenantId: string, employee: { officeLocationId: string | null }, location?: string) {
+    const coordinates = this.parseCoordinates(location);
+    if (!coordinates) throw new BadRequestException("A valid device location is required to clock in or out.");
+    const offices = await this.prisma.officeLocation.findMany({ where: { tenantId, active: true } });
+    const office = employee.officeLocationId ? offices.find((item) => item.id === employee.officeLocationId) : null;
+    if (offices.length && !office) throw new BadRequestException("Your employee profile does not have an active office assigned. Ask HR to assign one.");
+    const legacy = !offices.length ? await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { attendanceLatitude: true, attendanceLongitude: true, attendanceRadiusMeters: true } }) : null;
+    const target = office || (legacy?.attendanceLatitude !== null && legacy?.attendanceLatitude !== undefined && legacy.attendanceLongitude !== null && legacy.attendanceLongitude !== undefined ? { id: null, name: "office", latitude: legacy.attendanceLatitude, longitude: legacy.attendanceLongitude, radiusMeters: legacy.attendanceRadiusMeters } : null);
+    if (!target) return { officeLocationId: null };
+    const distance = this.distanceMeters(coordinates, target);
+    if (distance > target.radiusMeters) throw new BadRequestException(`You are outside the ${target.name} clock-in area (${Math.round(distance)}m away; limit ${target.radiusMeters}m).`);
+    return { officeLocationId: target.id };
+  }
+
   private pagination(page?: string, pageSize?: string) {
     const current = Math.max(1, Number.parseInt(page || "1", 10) || 1);
     const size = Math.min(100, Math.max(1, Number.parseInt(pageSize || "50", 10) || 50));
@@ -469,27 +495,29 @@ export class OperationsController {
     const tenantId = await this.tenantId(slug);
     const employeeQrToken = body.employeeQrToken || body.qrToken;
     const employee = employeeQrToken
-      ? await this.prisma.employee.findFirst({ where: { tenantId, attendanceQrToken: employeeQrToken, employmentStatus: "ACTIVE" } })
-      : await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub, employmentStatus: "ACTIVE" } });
+      ? await this.prisma.employee.findFirst({ where: { tenantId, attendanceQrToken: employeeQrToken, employmentStatus: "ACTIVE" }, select: { id: true, officeLocationId: true } })
+      : await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub, employmentStatus: "ACTIVE" }, select: { id: true, officeLocationId: true } });
     if (body.method?.toUpperCase() === "QR" && !employee) throw new BadRequestException("Invalid employee attendance QR code.");
     if (!employee) throw new BadRequestException("An active employee profile is required to clock in.");
+    const locationCheck = await this.validateAttendanceLocation(tenantId, employee, body.location);
     const now = new Date();
     const day = new Date(now); day.setHours(0, 0, 0, 0);
     const existing = await this.prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: employee.id, date: day } } });
     if (existing?.checkInAt && !existing.checkOutAt) throw new BadRequestException("You are already clocked in.");
-    const item = existing ? await this.prisma.attendanceRecord.update({ where: { id: existing.id }, data: { checkInAt: now, checkOutAt: null, status: "PRESENT", location: body.location, device: request.headers["user-agent"], ipAddress: request.ip, clockInMethod: body.method?.toUpperCase() ?? "WEB" } }) : await this.prisma.attendanceRecord.create({ data: { employeeId: employee.id, date: day, status: "PRESENT", checkInAt: now, location: body.location, device: request.headers["user-agent"], ipAddress: request.ip, clockInMethod: body.method?.toUpperCase() ?? "WEB" } });
+    const item = existing ? await this.prisma.attendanceRecord.update({ where: { id: existing.id }, data: { checkInAt: now, checkOutAt: null, status: "PRESENT", location: body.location, officeLocationId: locationCheck.officeLocationId, device: request.headers["user-agent"], ipAddress: request.ip, clockInMethod: body.method?.toUpperCase() ?? "WEB" } }) : await this.prisma.attendanceRecord.create({ data: { employeeId: employee.id, date: day, status: "PRESENT", checkInAt: now, location: body.location, officeLocationId: locationCheck.officeLocationId, device: request.headers["user-agent"], ipAddress: request.ip, clockInMethod: body.method?.toUpperCase() ?? "WEB" } });
     return { item };
   }
 
   @Post("attendance/clock-out")
-  async clockOut(@Tenant() slug: string, @Req() request: { user: { sub: string } }) {
+  async clockOut(@Tenant() slug: string, @Req() request: { user: { sub: string } }, @Body() body: { location?: string }) {
     const tenantId = await this.tenantId(slug);
-    const employee = await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub } });
+    const employee = await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub, employmentStatus: "ACTIVE" }, select: { id: true, officeLocationId: true } });
     if (!employee) throw new BadRequestException("Employee profile not found.");
     const day = new Date(); day.setHours(0, 0, 0, 0);
     const existing = await this.prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: employee.id, date: day } } });
     if (!existing?.checkInAt) throw new BadRequestException("You must clock in first.");
     if (existing.checkOutAt) throw new BadRequestException("You are already clocked out.");
-    return { item: await this.prisma.attendanceRecord.update({ where: { id: existing.id }, data: { checkOutAt: new Date() } }) };
+    const locationCheck = await this.validateAttendanceLocation(tenantId, employee, body.location);
+    return { item: await this.prisma.attendanceRecord.update({ where: { id: existing.id }, data: { checkOutAt: new Date(), location: body.location, officeLocationId: locationCheck.officeLocationId } }) };
   }
 }

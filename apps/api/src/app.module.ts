@@ -11,10 +11,11 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { WorkflowsModule } from "./modules/workflows/workflows.module";
 import { OperationsModule } from "./modules/operations/operations.module";
 import { IntegrationsModule } from "./modules/integrations/integrations.module";
+import { PdfEditorModule } from "./modules/pdf-editor/pdf-editor.module";
 import { HealthController } from "./health.controller";
 
 @Module({
   controllers: [HealthController],
-  imports: [PrismaModule, CommonModule, AuthModule, CrmModule, AccountingModule, HrModule, FormsModule, WorkflowsModule, SettingsModule, BillingModule, OperationsModule, IntegrationsModule],
+  imports: [PrismaModule, CommonModule, AuthModule, CrmModule, AccountingModule, HrModule, FormsModule, WorkflowsModule, SettingsModule, BillingModule, OperationsModule, IntegrationsModule, PdfEditorModule],
 })
 export class AppModule {}

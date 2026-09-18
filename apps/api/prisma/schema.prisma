@@ -94,6 +94,9 @@ model Tenant {
   requireMfa              Boolean                  @default(false)
   allowLocalAuth          Boolean                  @default(true)
   sessionTimeoutMinutes   Int                      @default(480)
+  attendanceLatitude      Float?
+  attendanceLongitude     Float?
+  attendanceRadiusMeters  Int                      @default(100)
   users                   User[]
   contacts                Contact[]
   companies               Company[]
@@ -110,6 +113,7 @@ model Tenant {
   accountingPeriods       AccountingPeriod[]
   journalEntries          JournalEntry[]
   employees               Employee[]
+  officeLocations         OfficeLocation[]
   forms                   FormTemplate[]
   workflows               Workflow[]
   dashboards              Dashboard[]
@@ -594,6 +598,8 @@ model Employee {
   id                 String              @id @default(cuid())
   tenantId           String
   tenant             Tenant              @relation(fields: [tenantId], references: [id])
+  officeLocationId   String?
+  officeLocation     OfficeLocation?     @relation(fields: [officeLocationId], references: [id])
   userId             String?
   user               User?               @relation(fields: [userId], references: [id])
   employeeNumber     String?
@@ -639,6 +645,24 @@ model Employee {
   @@unique([tenantId, employeeNumber])
 }
 
+model OfficeLocation {
+  id                String             @id @default(cuid())
+  tenantId          String
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name              String
+  address           String?
+  latitude          Float
+  longitude         Float
+  radiusMeters      Int                @default(150)
+  active            Boolean            @default(true)
+  employees         Employee[]
+  attendanceRecords AttendanceRecord[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([tenantId, active])
+}
+
 model LeaveRequest {
   id                String      @id @default(cuid())
   employeeId        String
@@ -674,6 +698,8 @@ model AttendanceRecord {
   id            String    @id @default(cuid())
   employeeId    String
   employee      Employee  @relation(fields: [employeeId], references: [id])
+  officeLocationId String?
+  officeLocation   OfficeLocation? @relation(fields: [officeLocationId], references: [id], onDelete: SetNull)
   date          DateTime
   status        String
   checkInAt     DateTime?

@@ -33,6 +33,10 @@ type PermissionMember = {
   };
 };
 
+type PermissionDefinition = { id: string; key: string; description?: string | null };
+type PermissionRole = { id: string; name: string; description?: string | null; permissionKeys: string[] };
+type OfficeLocation = { id: string; name: string; address?: string | null; latitude: number; longitude: number; radiusMeters: number; active: boolean };
+
 const permissionModules = [
   { key: "crm", label: "CRM" },
   { key: "accounting", label: "Accounting" },
@@ -147,6 +151,7 @@ type SettingsPayload = {
   };
   team: TeamMember[];
   permissions: PermissionMember[];
+  officeLocations: OfficeLocation[];
 };
 
 type ToastState = { type: "success" | "error"; message: string } | null;
@@ -535,6 +540,21 @@ export function LiveWorkspaceSettingsPage() {
   });
   const [enabledModules, setEnabledModules] = useState<string[]>(["crm", "accounting", "hr", "attendance", "assets", "users", "settings"]);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [officeForm, setOfficeForm] = useState({ name: "", address: "", latitude: "", longitude: "", radiusMeters: "150" });
+  const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>([]);
+
+  useEffect(() => {
+    if (Array.isArray(data?.officeLocations)) setOfficeLocations(data.officeLocations);
+  }, [data?.officeLocations]);
+
+  useEffect(() => {
+    void apiFetch<{ items: OfficeLocation[] }>("/settings/office-locations")
+      .then((result) => {
+        setOfficeLocations(result.items);
+        setData((current) => current ? { ...current, officeLocations: result.items } : current);
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!data) return;
@@ -646,6 +666,29 @@ export function LiveWorkspaceSettingsPage() {
     }
   }
 
+  async function addOfficeLocation() {
+    try {
+      if (!officeForm.name.trim() || !officeForm.latitude.trim() || !officeForm.longitude.trim()) {
+        notify("error", "Office name, latitude, and longitude are required.");
+        return;
+      }
+      if (!Number.isFinite(Number(officeForm.latitude)) || !Number.isFinite(Number(officeForm.longitude))) {
+        notify("error", "Latitude and longitude must be valid numbers.");
+        return;
+      }
+      const result = await apiFetch<{ item: OfficeLocation }>("/settings/office-locations", { method: "POST", body: JSON.stringify({ ...officeForm, latitude: Number(officeForm.latitude), longitude: Number(officeForm.longitude), radiusMeters: Number(officeForm.radiusMeters) }) });
+      setOfficeLocations((current) => [...current, result.item].sort((a, b) => a.name.localeCompare(b.name)));
+      setData((current) => current ? { ...current, officeLocations: [...(current.officeLocations ?? []), result.item].sort((a, b) => a.name.localeCompare(b.name)) } : current);
+      setOfficeForm({ name: "", address: "", latitude: "", longitude: "", radiusMeters: "150" });
+      notify("success", "Office location added.");
+    } catch (error) { notify("error", error instanceof Error ? error.message : "Unable to add office location."); }
+  }
+
+  async function deactivateOffice(office: OfficeLocation) {
+    try { await apiFetch(`/settings/office-locations/${office.id}`, { method: "DELETE" }); setOfficeLocations((current) => current.map((item) => item.id === office.id ? { ...item, active: false } : item)); setData((current) => current ? { ...current, officeLocations: (current.officeLocations ?? []).map((item) => item.id === office.id ? { ...item, active: false } : item) } : current); notify("success", `${office.name} was deactivated.`); }
+    catch (error) { notify("error", error instanceof Error ? error.message : "Unable to deactivate office location."); }
+  }
+
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden">
@@ -739,6 +782,11 @@ export function LiveWorkspaceSettingsPage() {
               );
             })}
           </div>
+        </div>
+        <div className="mt-6 border-t border-line pt-6">
+          <div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Office locations</p><p className="mt-1 text-xs text-slate-500">Employees can only clock in or out inside the radius of their assigned active office.</p></div>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5"><label className="grid gap-1 text-xs font-semibold text-slate-600"><span>Office name</span><Input value={officeForm.name} onChange={(event) => setOfficeForm((current) => ({ ...current, name: event.target.value }))} placeholder="e.g. Johannesburg HQ" /></label><label className="grid gap-1 text-xs font-semibold text-slate-600"><span>Address (optional)</span><Input value={officeForm.address} onChange={(event) => setOfficeForm((current) => ({ ...current, address: event.target.value }))} placeholder="Street or area" /></label><label className="grid gap-1 text-xs font-semibold text-slate-600"><span>Latitude</span><Input type="number" step="any" value={officeForm.latitude} onChange={(event) => setOfficeForm((current) => ({ ...current, latitude: event.target.value }))} placeholder="e.g. -26.2041" /></label><label className="grid gap-1 text-xs font-semibold text-slate-600"><span>Longitude</span><Input type="number" step="any" value={officeForm.longitude} onChange={(event) => setOfficeForm((current) => ({ ...current, longitude: event.target.value }))} placeholder="e.g. 28.0473" /></label><div className="flex items-end gap-2"><label className="grid min-w-0 flex-1 gap-1 text-xs font-semibold text-slate-600"><span>Clock-in radius (metres)</span><Input type="number" min="25" max="5000" value={officeForm.radiusMeters} onChange={(event) => setOfficeForm((current) => ({ ...current, radiusMeters: event.target.value }))} /></label><button type="button" onClick={() => void addOfficeLocation()} className="mb-0.5 rounded-2xl bg-brand-500 px-4 py-3 text-sm font-semibold text-white">Add</button></div></div>
+          <div className="mt-3 space-y-2">{officeLocations.filter((office) => office.active).map((office) => <div key={office.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-slate-50/70 px-4 py-3 text-sm"><div><p className="font-semibold text-ink">{office.name} <span className="font-normal text-slate-500">· {office.radiusMeters}m radius</span></p><p className="text-xs text-slate-500">{office.address || `${office.latitude}, ${office.longitude}`}</p></div><button type="button" onClick={() => void deactivateOffice(office)} className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600">Deactivate</button></div>)}{officeLocations.filter((office) => office.active).length === 0 ? <p className="rounded-2xl border border-dashed border-line px-4 py-3 text-xs text-slate-500">No office locations have been added yet.</p> : null}</div>
         </div>
         <div className="mt-6 flex items-center justify-between gap-4 border-t border-line pt-5">
           <p className="hidden text-xs text-slate-500 sm:block">Changes apply across the workspace after saving.</p>
@@ -1306,9 +1354,51 @@ export function LiveSecuritySettingsPage() {
 }
 
 export function LivePermissionsSettingsPage() {
-  const { data, toast } = useSettingsData();
+  const { data, toast, notify } = useSettingsData();
   const [search, setSearch] = useState("");
   const [selectedMember, setSelectedMember] = useState<PermissionMember | null>(null);
+  const [permissionDefinitions, setPermissionDefinitions] = useState<PermissionDefinition[]>([]);
+  const [permissionRoles, setPermissionRoles] = useState<PermissionRole[]>([]);
+  const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [selectedPermissionKeys, setSelectedPermissionKeys] = useState<string[]>([]);
+  const [newPermissionKey, setNewPermissionKey] = useState("");
+  const [newPermissionDescription, setNewPermissionDescription] = useState("");
+  const [permissionBusy, setPermissionBusy] = useState(false);
+
+  useEffect(() => {
+    void apiFetch<{ permissions: PermissionDefinition[]; roles: PermissionRole[] }>("/settings/permissions/catalog")
+      .then((result) => { setPermissionDefinitions(result.permissions); setPermissionRoles(result.roles); if (result.roles[0]) { setSelectedRoleId(result.roles[0].id); setSelectedPermissionKeys(result.roles[0].permissionKeys); } })
+      .catch((error) => notify("error", error instanceof Error ? error.message : "Unable to load permission definitions."));
+  }, []);
+
+  function selectPermissionRole(roleId: string) {
+    const role = permissionRoles.find((item) => item.id === roleId);
+    setSelectedRoleId(roleId);
+    setSelectedPermissionKeys(role?.permissionKeys ?? []);
+  }
+
+  async function addPermission() {
+    if (!newPermissionKey.trim()) return;
+    try {
+      setPermissionBusy(true);
+      const result = await apiFetch<{ permission: PermissionDefinition }>("/settings/permissions", { method: "POST", body: JSON.stringify({ key: newPermissionKey, description: newPermissionDescription }) });
+      setPermissionDefinitions((current) => [...current, result.permission].sort((a, b) => a.key.localeCompare(b.key)));
+      setNewPermissionKey(""); setNewPermissionDescription("");
+      notify("success", "Permission added. Assign it to a role below.");
+    } catch (error) { notify("error", error instanceof Error ? error.message : "Unable to add permission."); }
+    finally { setPermissionBusy(false); }
+  }
+
+  async function saveRolePermissions() {
+    if (!selectedRoleId) return;
+    try {
+      setPermissionBusy(true);
+      await apiFetch(`/settings/permissions/roles/${selectedRoleId}`, { method: "PATCH", body: JSON.stringify({ permissionKeys: selectedPermissionKeys }) });
+      setPermissionRoles((current) => current.map((role) => role.id === selectedRoleId ? { ...role, permissionKeys: selectedPermissionKeys } : role));
+      notify("success", "Role permissions updated.");
+    } catch (error) { notify("error", error instanceof Error ? error.message : "Unable to update role permissions."); }
+    finally { setPermissionBusy(false); }
+  }
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return (data?.permissions ?? []).filter(
@@ -1322,6 +1412,13 @@ export function LivePermissionsSettingsPage() {
 
   return (
     <div className="space-y-4">
+      <Card className="p-5">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+          <div><p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-500">Permission builder</p><h2 className="mt-1 text-xl font-semibold text-ink">Edit role permissions</h2><p className="mt-1 text-sm text-slate-500">Choose a role, select the permissions it may use, and save. Permission keys can also be added for future protected actions.</p></div>
+          <div className="flex flex-wrap gap-2"><Input value={newPermissionKey} onChange={(event) => setNewPermissionKey(event.target.value)} placeholder="crm.customers.export" className="min-w-[220px]" /><Input value={newPermissionDescription} onChange={(event) => setNewPermissionDescription(event.target.value)} placeholder="Description (optional)" className="min-w-[220px]" /><button type="button" onClick={() => void addPermission()} disabled={permissionBusy || !newPermissionKey.trim()} className="rounded-2xl bg-brand-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">Add permission</button></div>
+        </div>
+        {permissionRoles.length ? <div className="mt-5 grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]"><div><p className="text-xs font-semibold text-slate-500">Role</p><Select value={selectedRoleId} onChange={(event) => selectPermissionRole(event.target.value)} className="mt-1 w-full">{permissionRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</Select><p className="mt-2 text-xs text-slate-500">{permissionRoles.find((role) => role.id === selectedRoleId)?.description || "Select permissions for this role."}</p></div><div><div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{permissionDefinitions.map((permission) => <label key={permission.id} className="flex items-start gap-2 rounded-xl border border-line bg-soft/30 p-3 text-sm text-slate-700"><input type="checkbox" checked={selectedPermissionKeys.includes(permission.key)} onChange={(event) => setSelectedPermissionKeys((current) => event.target.checked ? [...current, permission.key] : current.filter((key) => key !== permission.key))} className="mt-0.5 h-4 w-4 accent-brand-500" /><span><span className="block font-semibold text-ink">{permission.key}</span>{permission.description ? <span className="mt-1 block text-xs text-slate-500">{permission.description}</span> : null}</span></label>)}</div><button type="button" onClick={() => void saveRolePermissions()} disabled={permissionBusy} className="mt-4 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{permissionBusy ? "Saving..." : "Save role permissions"}</button></div></div> : <p className="mt-5 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">No configurable roles were found for this workspace.</p>}
+      </Card>
       <Card className="overflow-hidden">
         <TableHeader
           label="Permissions"

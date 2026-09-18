@@ -1,6 +1,6 @@
 import { moduleCards, type ModuleCard } from "@/lib/data";
 
-export type ModuleKey = "crm" | "accounting" | "hr" | "attendance" | "assets" | "users" | "settings";
+export type ModuleKey = "crm" | "accounting" | "hr" | "attendance" | "assets" | "users" | "settings" | "pdf-editor";
 
 const roleModules: Record<string, ModuleKey[]> = {
   SALES_MANAGER: ["crm", "accounting"],
@@ -26,6 +26,7 @@ const routeToModuleKey: Array<{ prefix: string; key: ModuleKey }> = [
   { prefix: "/hr", key: "hr" },
   { prefix: "/attendance", key: "attendance" },
   { prefix: "/assets", key: "assets" },
+  { prefix: "/pdf-editor", key: "pdf-editor" },
   { prefix: "/settings/team", key: "users" },
   { prefix: "/settings", key: "settings" },
 ];
@@ -37,6 +38,7 @@ export function getModuleKeyFromPath(pathname: string): ModuleKey | null {
 export function filterModuleCards(enabledModules: string[]): ModuleCard[] {
   return moduleCards.filter((card) => {
     const moduleKey = getModuleKeyFromPath(card.href);
+    if (moduleKey === "pdf-editor") return false;
     return !moduleKey || enabledModules.includes(moduleKey);
   });
 }
@@ -44,5 +46,6 @@ export function filterModuleCards(enabledModules: string[]): ModuleCard[] {
 export function isModuleEnabled(pathname: string, enabledModules: string[]) {
   const moduleKey = getModuleKeyFromPath(pathname);
   if (!moduleKey) return true;
+  if (moduleKey === "pdf-editor") return true;
   return enabledModules.includes(moduleKey);
 }

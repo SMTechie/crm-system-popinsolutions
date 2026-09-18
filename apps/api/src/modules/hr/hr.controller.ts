@@ -127,18 +127,25 @@ export class HrController {
   async employees(@Tenant() tenantId: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
     const pagination = this.pagination(page, pageSize); const where = { tenantId: tenant.id };
-    const [items, total] = await Promise.all([this.prisma.employee.findMany({ where, include: { _count: { select: { leaveRequests: true, documents: true, attendanceRecords: true, payrollRuns: true, performanceReviews: true } } }, orderBy: { createdAt: "desc" }, skip: pagination.skip, take: pagination.take }), this.prisma.employee.count({ where })]);
+    const [items, total] = await Promise.all([this.prisma.employee.findMany({ where, include: { officeLocation: true, _count: { select: { leaveRequests: true, documents: true, attendanceRecords: true, payrollRuns: true, performanceReviews: true } } }, orderBy: { createdAt: "desc" }, skip: pagination.skip, take: pagination.take }), this.prisma.employee.count({ where })]);
     const employeesWithQr = await Promise.all(
       items.map((item) => item.attendanceQrToken
         ? item
         : this.prisma.employee.update({
             where: { id: item.id },
             data: { attendanceQrToken: randomBytes(24).toString("base64url") },
-            include: { _count: { select: { leaveRequests: true, documents: true, attendanceRecords: true, payrollRuns: true, performanceReviews: true } } },
+            include: { officeLocation: true, _count: { select: { leaveRequests: true, documents: true, attendanceRecords: true, payrollRuns: true, performanceReviews: true } } },
           }),
       ),
     );
     return { tenantId: tenant.slug, items: employeesWithQr, meta: { page: pagination.page, pageSize: pagination.pageSize, total, pageCount: Math.ceil(total / pagination.pageSize) } };
+  }
+
+  @Get("office-locations")
+  @RequiresPermission("hr.employees.view")
+  async officeLocations(@Tenant() tenantId: string) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    return { items: await this.prisma.officeLocation.findMany({ where: { tenantId: tenant.id, active: true }, orderBy: { name: "asc" } }) };
   }
 
   @Post("employees")
@@ -160,6 +167,7 @@ export class HrController {
       title?: string;
       department?: string;
       location?: string;
+      officeLocationId?: string | null;
       managerName?: string;
       employmentStatus?: string;
       employmentType?: string;
@@ -175,6 +183,9 @@ export class HrController {
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
     if (!body.fullName?.trim() || !body.email?.trim() || !body.title?.trim()) throw new BadRequestException("Employee name, email, and title are required.");
+    const activeOfficeCount = await this.prisma.officeLocation.count({ where: { tenantId: tenant.id, active: true } });
+    if (activeOfficeCount > 0 && !body.officeLocationId) throw new BadRequestException("An office location is required for this employee.");
+    if (body.officeLocationId && !(await this.prisma.officeLocation.findFirst({ where: { id: body.officeLocationId, tenantId: tenant.id, active: true } }))) throw new BadRequestException("Selected office location was not found or is inactive.");
     const item = await this.prisma.employee.create({
       data: {
         tenantId: tenant.id,
@@ -192,6 +203,7 @@ export class HrController {
         title: body.title.trim(),
         department: this.normalizeText(body.department),
         location: this.normalizeText(body.location),
+        officeLocationId: body.officeLocationId || null,
         managerName: this.normalizeText(body.managerName),
         employmentStatus: body.employmentStatus?.toUpperCase() || "ACTIVE",
         employmentType: this.normalizeText(body.employmentType),
@@ -228,6 +240,7 @@ export class HrController {
       title?: string;
       department?: string | null;
       location?: string | null;
+      officeLocationId?: string | null;
       managerName?: string | null;
       employmentStatus?: string | null;
       employmentType?: string | null;
@@ -248,6 +261,9 @@ export class HrController {
     if (!existing) {
       return { status: "missing", employeeId };
     }
+    const activeOfficeCount = await this.prisma.officeLocation.count({ where: { tenantId: tenant.id, active: true } });
+    if (activeOfficeCount > 0 && body.officeLocationId === null) throw new BadRequestException("An office location is required for this employee.");
+    if (body.officeLocationId && !(await this.prisma.officeLocation.findFirst({ where: { id: body.officeLocationId, tenantId: tenant.id, active: true } }))) throw new BadRequestException("Selected office location was not found or is inactive.");
     const item = await this.prisma.employee.update({
       where: { id: employeeId },
       data: {
@@ -264,6 +280,7 @@ export class HrController {
         title: body.title ?? undefined,
         department: this.normalizeText(body.department),
         location: this.normalizeText(body.location),
+        officeLocationId: body.officeLocationId === undefined ? undefined : body.officeLocationId,
         managerName: this.normalizeText(body.managerName),
         employmentStatus: this.normalizeText(body.employmentStatus),
         employmentType: this.normalizeText(body.employmentType),

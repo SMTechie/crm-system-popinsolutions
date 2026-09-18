@@ -109,6 +109,14 @@ export const moduleCards: ModuleCard[] = [
     ],
   },
   {
+    title: "PDF Editor",
+    subtitle: "Upload, edit, and save PDFs",
+    href: "/pdf-editor",
+    icon: FileText,
+    tint: "bg-fuchsia-50 text-fuchsia-600",
+    submodules: [{ title: "PDF documents", subtitle: "Edit and manage PDF files", href: "/pdf-editor", icon: FileText }],
+  },
+  {
     title: "Attendance",
     subtitle: "Clock-in, clock-out, and presence",
     href: "/attendance",

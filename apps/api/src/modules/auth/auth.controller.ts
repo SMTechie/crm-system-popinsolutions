@@ -15,6 +15,22 @@ const oauthCodeSchema = z.object({ code: z.string().min(20) });
 export class AuthController {
   constructor(private readonly authService: AuthService, private readonly prisma: PrismaService) {}
 
+  private distanceMeters(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+    const earthRadius = 6371000; const lat1 = (a.latitude * Math.PI) / 180; const lat2 = (b.latitude * Math.PI) / 180;
+    const dLat = ((b.latitude - a.latitude) * Math.PI) / 180; const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
+    const value = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    return earthRadius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+  }
+
+  private async validateKioskLocation(tenantId: string, employee: { officeLocationId: string | null }, location?: string) {
+    const [latitude, longitude] = (location || "").split(",").map((item) => Number(item.trim()));
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) throw new BadRequestException("A valid device location is required to clock in or out.");
+    const offices = await this.prisma.officeLocation.findMany({ where: { tenantId, active: true } });
+    const office = employee.officeLocationId ? offices.find((item) => item.id === employee.officeLocationId) : null;
+    if (offices.length && !office) throw new BadRequestException("This employee does not have an active office assigned.");
+    if (office && this.distanceMeters({ latitude, longitude }, office) > office.radiusMeters) throw new BadRequestException(`The employee is outside the ${office.name} clock-in area.`);
+  }
+
   private cookieValue(cookieHeader: string | undefined, name: string) {
     return cookieHeader?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
   }
@@ -52,9 +68,10 @@ export class AuthController {
     const tenant = await this.prisma.tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
     if (!tenant) throw new BadRequestException("Workspace not found.");
     const employee = body.qrToken
-      ? await this.prisma.employee.findFirst({ where: { tenantId: tenant.id, attendanceQrToken: body.qrToken, employmentStatus: "ACTIVE" } })
-      : await this.prisma.employee.findFirst({ where: { tenantId: tenant.id, employeeNumber: body.employeeNumber?.trim(), employmentStatus: "ACTIVE" } });
+      ? await this.prisma.employee.findFirst({ where: { tenantId: tenant.id, attendanceQrToken: body.qrToken, employmentStatus: "ACTIVE" }, select: { id: true, fullName: true, employeeNumber: true, officeLocationId: true } })
+      : await this.prisma.employee.findFirst({ where: { tenantId: tenant.id, employeeNumber: body.employeeNumber?.trim(), employmentStatus: "ACTIVE" }, select: { id: true, fullName: true, employeeNumber: true, officeLocationId: true } });
     if (!employee) throw new BadRequestException("Active employee not found. Scan a valid QR code or enter the employee number.");
+    await this.validateKioskLocation(tenant.id, employee, body.location);
     const day = new Date();
     day.setHours(0, 0, 0, 0);
     const action = body.action?.toUpperCase() === "OUT" ? "OUT" : "IN";

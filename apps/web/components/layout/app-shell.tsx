@@ -4,6 +4,7 @@ import type { PropsWithChildren } from "react";
 import { useState } from "react";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { Topbar } from "@/components/layout/topbar";
+import { PermissionWalkthrough } from "@/components/onboarding/permission-walkthrough";
 import type { SessionUser } from "@/lib/session";
 
 type AppShellProps = PropsWithChildren<{
@@ -25,6 +26,7 @@ export function AppShell({ children, title, description, actionLabel }: AppShell
         <div className="mx-auto max-w-[1600px] space-y-6 px-6 py-6">
           <main>{children}</main>
         </div>
+        {user ? <PermissionWalkthrough user={user} /> : null}
       </div>
     </AuthGuard>
   );

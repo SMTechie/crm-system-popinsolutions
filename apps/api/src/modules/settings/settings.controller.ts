@@ -121,10 +121,91 @@ export class SettingsController {
     writeFileSync(envPath, content, "utf8");
   }
 
+  @Get("permissions/catalog")
+  @RequiresPermission("settings.manage")
+  async getPermissionCatalog(@Tenant() tenantId: string) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    const [permissions, roles] = await Promise.all([
+      this.prisma.permission.findMany({ where: { tenantId: tenant.id }, orderBy: { key: "asc" } }),
+      this.prisma.role.findMany({ where: { tenantId: tenant.id }, include: { rolePermissions: { include: { permission: true } } }, orderBy: { name: "asc" } }),
+    ]);
+    return {
+      permissions: permissions.map((permission) => ({ id: permission.id, key: permission.key, description: permission.description })),
+      roles: roles.map((role) => ({ id: role.id, name: role.name, description: role.description, permissionKeys: role.rolePermissions.map((assignment) => assignment.permission.key).sort() })),
+    };
+  }
+
+  @Post("permissions")
+  @RequiresPermission("settings.manage")
+  async createPermission(@Tenant() tenantId: string, @Body() body: { key?: string; description?: string }) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    const key = body.key?.trim().toLowerCase();
+    if (!key || !/^[a-z0-9]+(?:[._-][a-z0-9]+)+$/.test(key)) throw new BadRequestException("Permission keys must use a format such as crm.customers.view.");
+    const existing = await this.prisma.permission.findUnique({ where: { tenantId_key: { tenantId: tenant.id, key } } });
+    if (existing) throw new BadRequestException("That permission already exists.");
+    const permission = await this.prisma.permission.create({ data: { tenantId: tenant.id, key, description: body.description?.trim() || null } });
+    return { permission: { id: permission.id, key: permission.key, description: permission.description } };
+  }
+
+  @Patch("permissions/roles/:roleId")
+  @RequiresPermission("settings.manage")
+  async updateRolePermissions(@Tenant() tenantId: string, @Param("roleId") roleId: string, @Body() body: { permissionKeys?: string[] }) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    const role = await this.prisma.role.findFirst({ where: { id: roleId, tenantId: tenant.id } });
+    if (!role) throw new BadRequestException("Permission role was not found.");
+    const keys = Array.from(new Set((body.permissionKeys ?? []).map((key) => key.trim().toLowerCase()).filter(Boolean)));
+    const permissions = await this.prisma.permission.findMany({ where: { tenantId: tenant.id, key: { in: keys } } });
+    if (permissions.length !== keys.length) throw new BadRequestException("One or more selected permissions were not found.");
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.rolePermission.deleteMany({ where: { roleId: role.id } });
+      if (permissions.length) await transaction.rolePermission.createMany({ data: permissions.map((permission) => ({ roleId: role.id, permissionId: permission.id })) });
+    });
+    return { status: "updated", roleId: role.id, permissionKeys: keys };
+  }
+
+  @Get("office-locations")
+  @RequiresPermission("settings.manage")
+  async officeLocations(@Tenant() tenantId: string) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    return { items: await this.prisma.officeLocation.findMany({ where: { tenantId: tenant.id }, orderBy: { name: "asc" } }) };
+  }
+
+  @Post("office-locations")
+  @RequiresPermission("settings.manage")
+  async createOfficeLocation(@Tenant() tenantId: string, @Body() body: { name?: string; address?: string; latitude?: number; longitude?: number; radiusMeters?: number }) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    if (!body.name?.trim() || !Number.isFinite(body.latitude) || !Number.isFinite(body.longitude)) throw new BadRequestException("Office name, latitude, and longitude are required.");
+    if (body.latitude! < -90 || body.latitude! > 90 || body.longitude! < -180 || body.longitude! > 180) throw new BadRequestException("The office coordinates are invalid.");
+    const radiusMeters = Math.round(body.radiusMeters ?? 150);
+    if (radiusMeters < 25 || radiusMeters > 5000) throw new BadRequestException("The clock-in radius must be between 25 and 5,000 metres.");
+    return { item: await this.prisma.officeLocation.create({ data: { tenantId: tenant.id, name: body.name.trim(), address: body.address?.trim() || null, latitude: body.latitude!, longitude: body.longitude!, radiusMeters } }) };
+  }
+
+  @Patch("office-locations/:officeId")
+  @RequiresPermission("settings.manage")
+  async updateOfficeLocation(@Tenant() tenantId: string, @Param("officeId") officeId: string, @Body() body: { name?: string; address?: string | null; latitude?: number; longitude?: number; radiusMeters?: number; active?: boolean }) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    const existing = await this.prisma.officeLocation.findFirst({ where: { id: officeId, tenantId: tenant.id } });
+    if (!existing) throw new BadRequestException("Office location not found.");
+    const radiusMeters = body.radiusMeters === undefined ? undefined : Math.round(body.radiusMeters);
+    if (radiusMeters !== undefined && (radiusMeters < 25 || radiusMeters > 5000)) throw new BadRequestException("The clock-in radius must be between 25 and 5,000 metres.");
+    return { item: await this.prisma.officeLocation.update({ where: { id: existing.id }, data: { name: body.name?.trim() || undefined, address: body.address === undefined ? undefined : body.address?.trim() || null, latitude: body.latitude, longitude: body.longitude, radiusMeters, active: body.active } }) };
+  }
+
+  @Delete("office-locations/:officeId")
+  @RequiresPermission("settings.manage")
+  async deleteOfficeLocation(@Tenant() tenantId: string, @Param("officeId") officeId: string) {
+    const tenant = await this.tenantService.ensureTenant(tenantId);
+    const existing = await this.prisma.officeLocation.findFirst({ where: { id: officeId, tenantId: tenant.id } });
+    if (!existing) throw new BadRequestException("Office location not found.");
+    await this.prisma.officeLocation.update({ where: { id: existing.id }, data: { active: false } });
+    return { status: "deactivated", officeId: existing.id };
+  }
+
   @Get()
   async getSettings(@Tenant() tenantId: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
-    const [users, userCount, contactCount, companyCount, formCount, workflowCount, invoiceCount, expenseCount, attachmentAggregate] =
+    const [users, officeLocations, userCount, contactCount, companyCount, formCount, workflowCount, invoiceCount, expenseCount, attachmentAggregate] =
       await Promise.all([
         this.prisma.user.findMany({
           where: { tenantId: tenant.id },
@@ -139,6 +220,7 @@ export class SettingsController {
           orderBy: { createdAt: "asc" },
         }),
         this.prisma.user.count({ where: { tenantId: tenant.id } }),
+        this.prisma.officeLocation.findMany({ where: { tenantId: tenant.id }, orderBy: { name: "asc" } }),
         this.prisma.contact.count({ where: { tenantId: tenant.id } }),
         this.prisma.company.count({ where: { tenantId: tenant.id } }),
         this.prisma.formTemplate.count({ where: { tenantId: tenant.id } }),
@@ -189,6 +271,7 @@ export class SettingsController {
         allowLocalAuth: tenant.allowLocalAuth,
         sessionTimeoutMinutes: tenant.sessionTimeoutMinutes,
       },
+      officeLocations,
       subscription: {
         planCode: tenant.planCode,
         subscriptionStatus: tenant.subscriptionStatus,

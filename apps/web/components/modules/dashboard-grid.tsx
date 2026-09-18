@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Clock3, MapPin, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { type ModuleCard } from "@/lib/data";
@@ -12,6 +13,7 @@ import { apiFetch } from "@/lib/api";
 type AttendanceToday = { id: string; date: string; status: string; checkInAt?: string | null; checkOutAt?: string | null; location?: string | null };
 
 export function DashboardGrid() {
+  const router = useRouter();
   const [activeModule, setActiveModule] = useState<ModuleCard | null>(null);
   const [availableModules, setAvailableModules] = useState<ModuleCard[]>([]);
   const [userName, setUserName] = useState("there");
@@ -45,7 +47,7 @@ export function DashboardGrid() {
     setAttendanceMessage("");
     try {
       const location = await getLocation();
-      const result = await apiFetch<{ item: AttendanceToday }>(`/attendance/clock-${action === "in" ? "in" : "out"}`, { method: "POST", body: JSON.stringify({ method: "WEB", location }) });
+          const result = await apiFetch<{ item: AttendanceToday }>(`/attendance/clock-${action === "in" ? "in" : "out"}`, { method: "POST", body: JSON.stringify({ method: "WEB", location }) });
       setTodayAttendance(result.item);
       setAttendanceMessage(action === "in" ? "Clocked in successfully." : "Clocked out successfully.");
     } catch (error) {
@@ -78,7 +80,7 @@ export function DashboardGrid() {
         {availableModules.map((card) => {
           const Icon = card.icon;
           return (
-            <button key={card.title} onClick={() => setActiveModule(card)} className="text-left">
+            <button key={card.title} onClick={() => card.submodules.length === 1 ? router.push(card.submodules[0].href) : setActiveModule(card)} className="text-left">
               <Card className={`group h-full min-h-[116px] w-full border-transparent p-3 transition duration-200 hover:-translate-y-1 hover:border-brand-100 hover:bg-[#fbfcff] hover:shadow-[0_12px_24px_rgba(46,90,232,0.10)] ${moduleCardTone(card.title)}`}>
                 <div className={`grid h-8 w-8 place-items-center rounded-[14px] transition duration-200 group-hover:scale-[1.04] ${card.tint}`}>
                   <Icon className="h-3.5 w-3.5" />
@@ -123,14 +125,14 @@ export function DashboardGrid() {
             </div>
 
             <div className="mt-5 grid gap-2.5 md:grid-cols-2">
-              {activeModule.submodules.map((submodule) => {
+              {activeModule.submodules.map((submodule, index) => {
                 const Icon = submodule.icon;
                 return (
                   <Link
                     key={`${activeModule.title}-${submodule.title}`}
                     href={submodule.href}
                     onClick={() => setActiveModule(null)}
-                    className="group rounded-[20px] border border-line bg-white px-3.5 py-3.5 transition hover:-translate-y-0.5 hover:border-brand-100 hover:bg-soft"
+                    className={`group rounded-[20px] border border-line px-3.5 py-3.5 transition hover:-translate-y-0.5 hover:border-brand-100 ${moduleSubmoduleTone(activeModule.title, index)}`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-start gap-3">
@@ -157,14 +159,26 @@ export function DashboardGrid() {
 
 function moduleCardTone(title: string) {
   const tones: Record<string, string> = {
-    CRM: "bg-gradient-to-br from-cyan-100/90 via-cyan-50/70 to-sky-50/60",
-    Accounting: "bg-gradient-to-br from-emerald-100/90 via-emerald-50/70 to-teal-50/60",
-    HR: "bg-gradient-to-br from-rose-100/90 via-rose-50/70 to-pink-50/60",
-    Attendance: "bg-gradient-to-br from-amber-100/90 via-amber-50/70 to-orange-50/60",
-    Assets: "bg-gradient-to-br from-indigo-100/90 via-indigo-50/70 to-blue-50/60",
-    Projects: "bg-gradient-to-br from-violet-100/90 via-violet-50/70 to-purple-50/60",
-    Users: "bg-gradient-to-br from-sky-100/90 via-sky-50/70 to-blue-50/60",
-    Settings: "bg-gradient-to-br from-slate-100/90 via-slate-50/70 to-gray-50/60",
+    CRM: "!bg-gradient-to-br from-cyan-100/90 via-cyan-50/70 to-sky-50/60",
+    Accounting: "!bg-gradient-to-br from-emerald-100/90 via-emerald-50/70 to-teal-50/60",
+    HR: "!bg-gradient-to-br from-rose-100/90 via-rose-50/70 to-pink-50/60",
+    Attendance: "!bg-gradient-to-br from-amber-100/90 via-amber-50/70 to-orange-50/60",
+    Assets: "!bg-gradient-to-br from-indigo-100/90 via-indigo-50/70 to-blue-50/60",
+    Projects: "!bg-gradient-to-br from-violet-100/90 via-violet-50/70 to-purple-50/60",
+    Users: "!bg-gradient-to-br from-sky-100/90 via-sky-50/70 to-blue-50/60",
+    Settings: "!bg-gradient-to-br from-slate-100/90 via-slate-50/70 to-gray-50/60",
   };
   return tones[title] ?? "bg-white";
+}
+
+function moduleSubmoduleTone(title: string, index: number) {
+  const tones: Record<string, string[]> = {
+    CRM: ["!bg-cyan-50", "!bg-sky-50", "!bg-teal-50", "!bg-blue-50"],
+    Accounting: ["!bg-emerald-50", "!bg-teal-50", "!bg-lime-50", "!bg-green-50"],
+    HR: ["!bg-rose-50", "!bg-pink-50", "!bg-red-50", "!bg-orange-50"],
+    Assets: ["!bg-indigo-50", "!bg-blue-50", "!bg-violet-50", "!bg-sky-50"],
+    Attendance: ["!bg-amber-50", "!bg-orange-50", "!bg-yellow-50", "!bg-lime-50"],
+    Settings: ["!bg-slate-50", "!bg-gray-50", "!bg-zinc-50", "!bg-blue-50"],
+  };
+  return tones[title]?.[index % (tones[title]?.length || 1)] ?? "!bg-brand-50";
 }

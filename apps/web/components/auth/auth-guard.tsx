@@ -80,7 +80,7 @@ export function AuthGuard({ children, onResolved }: AuthGuardProps) {
   if (status !== "ready") {
     return (
       <div className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#edf4ff_0%,#f9fbff_40%,#f5f8ff_100%)]" aria-label="Loading workspace" role="status">
-        <div className="rounded-[28px] border border-line bg-white px-10 py-9 shadow-panel">
+        <div className="px-10 py-9">
           <div id="wifi-loader" aria-hidden="true">
             <svg className="circle-outer" viewBox="0 0 86 86"><circle className="back" cx="43" cy="43" r="40" /><circle className="front" cx="43" cy="43" r="40" /></svg>
             <svg className="circle-middle" viewBox="0 0 60 60"><circle className="back" cx="30" cy="30" r="27" /><circle className="front" cx="30" cy="30" r="27" /></svg>

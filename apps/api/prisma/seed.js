@@ -8,6 +8,12 @@ async function main() {
     const hash = scryptSync(password, salt, 64).toString("hex");
     return `${salt}:${hash}`;
   };
+  const demoToday = new Date();
+  demoToday.setHours(0, 0, 0, 0);
+  const demoCheckIn = new Date(demoToday);
+  demoCheckIn.setHours(7, 58, 0, 0);
+  const demoCheckOut = new Date(demoToday);
+  demoCheckOut.setHours(17, 4, 0, 0);
 
   const tenant = await prisma.tenant.upsert({
     where: { slug: "demo-tenant" },
@@ -23,8 +29,8 @@ async function main() {
       emailFromName: "Pop In Solutions",
       emailFromAddress: "support@popinsolutions.co.za",
       replyToEmail: "support@popinsolutions.co.za",
-      trialEndsAt: new Date("2026-09-03T00:00:00.000Z"),
-      subscriptionRenewsAt: new Date("2026-09-03T00:00:00.000Z"),
+      trialEndsAt: null,
+      subscriptionRenewsAt: new Date("2027-09-03T00:00:00.000Z"),
       maxUsers: 250,
       maxStorageGb: 250,
       supportEmail: "support@popinsolutions.co.za",
@@ -55,8 +61,8 @@ async function main() {
       emailFromName: "Pop In Solutions",
       emailFromAddress: "support@popinsolutions.co.za",
       replyToEmail: "support@popinsolutions.co.za",
-      trialEndsAt: new Date("2026-09-03T00:00:00.000Z"),
-      subscriptionRenewsAt: new Date("2026-09-03T00:00:00.000Z"),
+      trialEndsAt: null,
+      subscriptionRenewsAt: new Date("2027-09-03T00:00:00.000Z"),
       maxUsers: 250,
       maxStorageGb: 250,
       supportEmail: "support@popinsolutions.co.za",
@@ -74,6 +80,28 @@ async function main() {
       allowLocalAuth: true,
       sessionTimeoutMinutes: 480,
     },
+  });
+
+  const johannesburgOffice = await prisma.officeLocation.upsert({
+    where: { id: `${tenant.id}-johannesburg-hq` },
+    update: { name: "Johannesburg HQ", address: "14 Rivonia Road, Sandton, Johannesburg", latitude: -26.1076, longitude: 28.0567, radiusMeters: 250, active: true },
+    create: { id: `${tenant.id}-johannesburg-hq`, tenantId: tenant.id, name: "Johannesburg HQ", address: "14 Rivonia Road, Sandton, Johannesburg", latitude: -26.1076, longitude: 28.0567, radiusMeters: 250, active: true },
+  });
+  const pretoriaOffice = await prisma.officeLocation.upsert({
+    where: { id: `${tenant.id}-pretoria-office` },
+    update: { name: "Pretoria Office", address: "425 Government Avenue, Pretoria", latitude: -25.7479, longitude: 28.2293, radiusMeters: 250, active: true },
+    create: { id: `${tenant.id}-pretoria-office`, tenantId: tenant.id, name: "Pretoria Office", address: "425 Government Avenue, Pretoria", latitude: -25.7479, longitude: 28.2293, radiusMeters: 250, active: true },
+  });
+
+  await prisma.fileAttachment.upsert({
+    where: { id: `${tenant.id}-seed-contract-file` },
+    update: { fileName: "lerato-employment-contract.pdf", mimeType: "application/pdf", sizeBytes: 1843200, fileKey: "seed/hr/lerato-employment-contract.pdf", entityType: "Employee", entityId: `${tenant.id}-lerato-dlamini` },
+    create: { id: `${tenant.id}-seed-contract-file`, tenantId: tenant.id, entityType: "Employee", entityId: `${tenant.id}-lerato-dlamini`, fileKey: "seed/hr/lerato-employment-contract.pdf", fileName: "lerato-employment-contract.pdf", mimeType: "application/pdf", sizeBytes: 1843200 },
+  });
+  await prisma.fileAttachment.upsert({
+    where: { id: `${tenant.id}-seed-invoice-file` },
+    update: { fileName: "invoice-inv-2026-0001.pdf", mimeType: "application/pdf", sizeBytes: 921600, fileKey: "seed/accounting/invoice-inv-2026-0001.pdf", entityType: "Invoice", entityId: "INV-2026-0001" },
+    create: { id: `${tenant.id}-seed-invoice-file`, tenantId: tenant.id, entityType: "Invoice", entityId: "INV-2026-0001", fileKey: "seed/accounting/invoice-inv-2026-0001.pdf", fileName: "invoice-inv-2026-0001.pdf", mimeType: "application/pdf", sizeBytes: 921600 },
   });
 
   const user = await prisma.user.upsert({
@@ -142,8 +170,8 @@ async function main() {
   if (employeeDemoUser) {
     await prisma.employee.upsert({
       where: { id: `${tenant.id}-employee-demo` },
-      update: { userId: employeeDemoUser.id, fullName: employeeDemoUser.fullName, email: employeeDemoUser.email, title: "Operations Employee", employmentStatus: "ACTIVE" },
-      create: { id: `${tenant.id}-employee-demo`, tenantId: tenant.id, userId: employeeDemoUser.id, fullName: employeeDemoUser.fullName, email: employeeDemoUser.email, title: "Operations Employee", employmentStatus: "ACTIVE" },
+      update: { userId: employeeDemoUser.id, fullName: employeeDemoUser.fullName, email: employeeDemoUser.email, title: "Operations Employee", employmentStatus: "ACTIVE", officeLocationId: johannesburgOffice.id },
+      create: { id: `${tenant.id}-employee-demo`, tenantId: tenant.id, userId: employeeDemoUser.id, officeLocationId: johannesburgOffice.id, fullName: employeeDemoUser.fullName, email: employeeDemoUser.email, title: "Operations Employee", employmentStatus: "ACTIVE" },
     });
   }
 
@@ -600,6 +628,7 @@ async function main() {
       startDate: new Date("2024-04-01T08:00:00.000Z"),
       userId: user.id,
       salaryAmount: 55000,
+      officeLocationId: johannesburgOffice.id,
     },
     create: {
       id: `${tenant.id}-jones-mayekiso`,
@@ -615,6 +644,7 @@ async function main() {
       employmentStatus: "ACTIVE",
       startDate: new Date("2024-04-01T08:00:00.000Z"),
       salaryAmount: 55000,
+      officeLocationId: johannesburgOffice.id,
     },
   });
 
@@ -631,6 +661,7 @@ async function main() {
       employmentStatus: "ACTIVE",
       startDate: new Date("2025-01-15T08:00:00.000Z"),
       salaryAmount: 42000,
+      officeLocationId: johannesburgOffice.id,
     },
     {
       id: `${tenant.id}-ernest-molelekwa`,
@@ -644,6 +675,7 @@ async function main() {
       employmentStatus: "ACTIVE",
       startDate: new Date("2025-06-01T08:00:00.000Z"),
       salaryAmount: 26000,
+      officeLocationId: pretoriaOffice.id,
     },
   ];
 
@@ -679,22 +711,25 @@ async function main() {
   const ernest = await prisma.employee.findUnique({ where: { id: `${tenant.id}-ernest-molelekwa` } });
 
   if (lerato) {
+    await prisma.attendanceRecord.deleteMany({ where: { id: `${lerato.id}-attendance-2026-08-04` } });
     await prisma.attendanceRecord.upsert({
-      where: { id: `${lerato.id}-attendance-2026-08-04` },
+      where: { id: `${lerato.id}-attendance-demo-today` },
       update: {
-        date: new Date("2026-08-04T00:00:00.000Z"),
+        date: demoToday,
         status: "PRESENT",
-        checkInAt: new Date("2026-08-04T07:58:00.000Z"),
-        checkOutAt: new Date("2026-08-04T17:04:00.000Z"),
+        checkInAt: demoCheckIn,
+        checkOutAt: demoCheckOut,
+        officeLocationId: johannesburgOffice.id,
         notes: "Head office attendance",
       },
       create: {
-        id: `${lerato.id}-attendance-2026-08-04`,
+        id: `${lerato.id}-attendance-demo-today`,
         employeeId: lerato.id,
-        date: new Date("2026-08-04T00:00:00.000Z"),
+        date: demoToday,
         status: "PRESENT",
-        checkInAt: new Date("2026-08-04T07:58:00.000Z"),
-        checkOutAt: new Date("2026-08-04T17:04:00.000Z"),
+        checkInAt: demoCheckIn,
+        checkOutAt: demoCheckOut,
+        officeLocationId: johannesburgOffice.id,
         notes: "Head office attendance",
       },
     });

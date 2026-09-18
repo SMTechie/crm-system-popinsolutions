@@ -39,6 +39,8 @@ type Employee = {
   title: string;
   department?: string | null;
   location?: string | null;
+  officeLocationId?: string | null;
+  officeLocation?: { id: string; name: string; radiusMeters: number } | null;
   managerName?: string | null;
   employmentStatus?: string | null;
   employmentType?: string | null;
@@ -95,6 +97,7 @@ type PayrollRun = {
   notes?: string | null;
   deductionItems?: PayrollDeduction[];
 };
+type OfficeLocation = { id: string; name: string; radiusMeters: number };
 
 type PayrollDeduction = { id?: string; name: string; mode: "AMOUNT" | "PERCENT"; value: string };
 
@@ -150,6 +153,7 @@ const emptyEmployee = {
   bankAccountNumber: "",
   bankBranch: "",
   bankAccountType: "",
+  officeLocationId: "",
 };
 
 const emptyLeave = {
@@ -391,6 +395,7 @@ function useHrData() {
   const [payrollRuns, setPayrollRuns] = useState<PayrollRun[]>([]);
   const [performanceReviews, setPerformanceReviews] = useState<PerformanceReview[]>([]);
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
+  const [officeLocations, setOfficeLocations] = useState<OfficeLocation[]>([]);
   const [toast, setToast] = useState<ToastState>(null);
 
   function notify(type: "success" | "error", message: string) {
@@ -399,7 +404,7 @@ function useHrData() {
 
   async function reload() {
     try {
-      const [overviewData, employeeData, leaveData, attendanceData, payrollData, reviewData, documentData] = await Promise.all([
+      const [overviewData, employeeData, leaveData, attendanceData, payrollData, reviewData, documentData, officeData] = await Promise.all([
         apiFetch<HrOverview>("/hr/overview"),
         apiFetch<{ items: Employee[] }>("/hr/employees"),
         apiFetch<{ items: LeaveRequest[] }>("/hr/leave-requests"),
@@ -407,6 +412,7 @@ function useHrData() {
         apiFetch<{ items: PayrollRun[] }>("/hr/payroll-runs"),
         apiFetch<{ items: PerformanceReview[] }>("/hr/performance-reviews"),
         apiFetch<{ items: EmployeeDocument[] }>("/hr/documents"),
+        apiFetch<{ items: OfficeLocation[] }>("/hr/office-locations"),
       ]);
       setOverview(overviewData);
       setEmployees(employeeData.items);
@@ -415,6 +421,7 @@ function useHrData() {
       setPayrollRuns(payrollData.items);
       setPerformanceReviews(reviewData.items);
       setDocuments(documentData.items);
+      setOfficeLocations(officeData.items);
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Failed to load HR workspace.");
     }
@@ -438,6 +445,7 @@ function useHrData() {
     payrollRuns,
     performanceReviews,
     documents,
+    officeLocations,
     toast,
     notify,
     reload,
@@ -447,6 +455,7 @@ function useHrData() {
 function EmployeeModal({
   form,
   setForm,
+  officeLocations,
   selectedPhoto,
   setSelectedPhoto,
   selectedDocuments,
@@ -456,6 +465,7 @@ function EmployeeModal({
 }: {
   form: typeof emptyEmployee;
   setForm: Dispatch<SetStateAction<typeof emptyEmployee>>;
+  officeLocations: OfficeLocation[];
   selectedPhoto: File | null;
   setSelectedPhoto: (file: File | null) => void;
   selectedDocuments: File[];
@@ -467,7 +477,7 @@ function EmployeeModal({
     <BaseModal label={form.id ? "Edit Employee" : "Add Employee"} title="Manage employee profile" onClose={onClose} onSave={onSave} saveLabel={form.id ? "Update Employee" : "Save Employee"}>
       <div className="space-y-5">
         <section className="rounded-3xl border border-line bg-slate-50/70 p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Identity and contact</p><p className="mt-1 text-sm text-slate-600">Core employee details used across HR, payroll, and payslips.</p></div><div className="grid gap-3 md:grid-cols-2"><Input value={form.employeeNumber} onChange={(event) => setForm((current) => ({ ...current, employeeNumber: event.target.value }))} placeholder="Employee number (optional)" /><Input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="Full name" required /><Input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="Email address" required /><Input type="tel" value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone number" /><Input value={form.idPassportNumber} onChange={(event) => setForm((current) => ({ ...current, idPassportNumber: event.target.value }))} placeholder="ID / passport number" /><label className="text-xs font-semibold text-slate-500">Date of birth<Input className="mt-1" type="date" value={form.dateOfBirth} onChange={(event) => setForm((current) => ({ ...current, dateOfBirth: event.target.value }))} /></label><Select value={form.gender} onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}><option value="">Select gender</option><option value="FEMALE">Female</option><option value="MALE">Male</option><option value="NON_BINARY">Non-binary</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option></Select><Textarea value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} rows={2} className="md:col-span-2" placeholder="Residential address" /></div></section>
-        <section className="rounded-3xl border border-line bg-white p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Employment</p><p className="mt-1 text-sm text-slate-600">Set the employee’s role, reporting line, status, and employment dates.</p></div><div className="grid gap-3 md:grid-cols-2"><Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Job title" required /><Input value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} placeholder="Department" /><Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} placeholder="Work location" /><Input value={form.managerName} onChange={(event) => setForm((current) => ({ ...current, managerName: event.target.value }))} placeholder="Manager / supervisor" /><Select value={form.employmentStatus} onChange={(event) => setForm((current) => ({ ...current, employmentStatus: event.target.value }))}>{["ACTIVE", "ON_LEAVE", "PROBATION", "OFFBOARDED"].map((item) => <option key={item} value={item}>{item}</option>)}</Select><Select value={form.employmentType} onChange={(event) => setForm((current) => ({ ...current, employmentType: event.target.value }))}>{["FULL_TIME", "PART_TIME", "CONTRACT", "TEMPORARY", "INTERN"].map((item) => <option key={item} value={item}>{item}</option>)}</Select><label className="text-xs font-semibold text-slate-500">Start date<Input className="mt-1" type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} required /></label><label className="text-xs font-semibold text-slate-500">End date (optional)<Input className="mt-1" type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></label></div></section>
+        <section className="rounded-3xl border border-line bg-white p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Employment</p><p className="mt-1 text-sm text-slate-600">Set the employee’s role, reporting line, status, office, and employment dates.</p></div><div className="grid gap-3 md:grid-cols-2"><Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} placeholder="Job title" required /><Input value={form.department} onChange={(event) => setForm((current) => ({ ...current, department: event.target.value }))} placeholder="Department" /><Input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} placeholder="Work location" /><label className="grid gap-1 text-xs font-semibold text-slate-500"><span>Assigned office {officeLocations.length ? "*" : "(optional)"}</span><Select required={officeLocations.length > 0} value={form.officeLocationId} onChange={(event) => setForm((current) => ({ ...current, officeLocationId: event.target.value }))} className="w-full"><option value="">Select office for clock-in</option>{officeLocations.map((office) => <option key={office.id} value={office.id}>{office.name} · {office.radiusMeters}m radius</option>)}</Select></label><Input value={form.managerName} onChange={(event) => setForm((current) => ({ ...current, managerName: event.target.value }))} placeholder="Manager / supervisor" /><Select value={form.employmentStatus} onChange={(event) => setForm((current) => ({ ...current, employmentStatus: event.target.value }))}>{["ACTIVE", "ON_LEAVE", "PROBATION", "OFFBOARDED"].map((item) => <option key={item} value={item}>{item}</option>)}</Select><Select value={form.employmentType} onChange={(event) => setForm((current) => ({ ...current, employmentType: event.target.value }))}>{["FULL_TIME", "PART_TIME", "CONTRACT", "TEMPORARY", "INTERN"].map((item) => <option key={item} value={item}>{item}</option>)}</Select><label className="text-xs font-semibold text-slate-500">Start date<Input className="mt-1" type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} required /></label><label className="text-xs font-semibold text-slate-500">End date (optional)<Input className="mt-1" type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></label></div></section>
         <section className="rounded-3xl border border-line bg-white p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Compensation and banking</p><p className="mt-1 text-sm text-slate-600">These details support payroll preparation and payslip processing.</p></div><div className="grid gap-3 md:grid-cols-2"><label className="text-xs font-semibold text-slate-500">Monthly salary<Input className="mt-1" type="number" min="0" step="0.01" value={form.salaryAmount} onChange={(event) => setForm((current) => ({ ...current, salaryAmount: event.target.value }))} placeholder="0.00" /></label><Input value={form.bankName} onChange={(event) => setForm((current) => ({ ...current, bankName: event.target.value }))} placeholder="Bank name" /><Input value={form.bankAccountHolder} onChange={(event) => setForm((current) => ({ ...current, bankAccountHolder: event.target.value }))} placeholder="Account holder" /><Input inputMode="numeric" value={form.bankAccountNumber} onChange={(event) => setForm((current) => ({ ...current, bankAccountNumber: event.target.value }))} placeholder="Account number" /><Input value={form.bankBranch} onChange={(event) => setForm((current) => ({ ...current, bankBranch: event.target.value }))} placeholder="Branch code" /><Select value={form.bankAccountType} onChange={(event) => setForm((current) => ({ ...current, bankAccountType: event.target.value }))}><option value="">Account type</option><option value="CHEQUE">Cheque</option><option value="SAVINGS">Savings</option><option value="CURRENT">Current</option></Select></div></section>
         <section className="rounded-3xl border border-line bg-slate-50/70 p-4"><div className="mb-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Emergency contact and files</p><p className="mt-1 text-sm text-slate-600">Attach a profile picture and employee records such as IDs, contracts, or tax documents.</p></div><div className="grid gap-3 md:grid-cols-2"><Input value={form.emergencyContactName} onChange={(event) => setForm((current) => ({ ...current, emergencyContactName: event.target.value }))} placeholder="Emergency contact name" /><Input type="tel" value={form.emergencyContactPhone} onChange={(event) => setForm((current) => ({ ...current, emergencyContactPhone: event.target.value }))} placeholder="Emergency contact phone" /><label className="rounded-2xl border border-dashed border-brand-300 bg-white p-4 text-xs font-semibold text-slate-600">Profile picture<input type="file" accept="image/png,image/jpeg" onChange={(event) => setSelectedPhoto(event.target.files?.[0] ?? null)} className="mt-2 block w-full text-xs" />{selectedPhoto ? <span className="mt-1 block truncate font-normal text-slate-500">{selectedPhoto.name}</span> : null}</label><label className="rounded-2xl border border-dashed border-brand-300 bg-white p-4 text-xs font-semibold text-slate-600">Employee documents<input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.txt,.docx" onChange={(event) => setSelectedDocuments(Array.from(event.target.files ?? []))} className="mt-2 block w-full text-xs" />{selectedDocuments.length ? <span className="mt-1 block font-normal text-slate-500">{selectedDocuments.length} file(s) selected</span> : null}</label></div></section>
       </div>
@@ -737,7 +747,7 @@ export function LiveHr() {
 }
 
 export function LiveEmployeesPage() {
-  const { employees, documents, attendance, toast, notify, reload } = useHrData();
+  const { employees, documents, attendance, officeLocations, toast, notify, reload } = useHrData();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [showForm, setShowForm] = useState(false);
@@ -790,6 +800,7 @@ export function LiveEmployeesPage() {
         bankAccountNumber: form.bankAccountNumber || "",
         bankBranch: form.bankBranch || "",
         bankAccountType: form.bankAccountType || "",
+        officeLocationId: form.officeLocationId || null,
       };
       let employeeId = form.id;
       if (form.id) {
@@ -853,7 +864,7 @@ export function LiveEmployeesPage() {
               <tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500">
                 <th className="px-4 py-2.5 font-semibold">Employee</th>
                 <th className="px-4 py-2.5 font-semibold">Title</th>
-                <th className="px-4 py-2.5 font-semibold">Department</th>
+                <th className="px-4 py-2.5 font-semibold">Office</th>
                 <th className="px-4 py-2.5 font-semibold">Status</th>
                 <th className="px-4 py-2.5 font-semibold">Salary</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
@@ -884,7 +895,7 @@ export function LiveEmployeesPage() {
           </table>
         </div>
       </Card>
-      {showForm ? <EmployeeModal form={form} setForm={setForm} selectedPhoto={selectedPhoto} setSelectedPhoto={setSelectedPhoto} selectedDocuments={selectedDocuments} setSelectedDocuments={setSelectedDocuments} onClose={() => setShowForm(false)} onSave={() => void saveEmployee()} /> : null}
+      {showForm ? <EmployeeModal form={form} setForm={setForm} officeLocations={officeLocations} selectedPhoto={selectedPhoto} setSelectedPhoto={setSelectedPhoto} selectedDocuments={selectedDocuments} setSelectedDocuments={setSelectedDocuments} onClose={() => setShowForm(false)} onSave={() => void saveEmployee()} /> : null}
       {employeeQr ? <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/40 px-4 py-8 backdrop-blur-sm"><div className="w-full max-w-md rounded-[28px] border border-line bg-white p-6 text-center shadow-[0_30px_80px_rgba(15,23,42,0.2)]"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-500">Employee attendance QR</p><h2 className="mt-2 text-2xl font-semibold text-ink">{employeeQr.employee.fullName}</h2><p className="mt-1 text-sm text-slate-500">Scan this code to open the secure employee clock-in page.</p><img src={employeeQr.qrDataUrl} alt={`Attendance QR for ${employeeQr.employee.fullName}`} className="mx-auto mt-5 h-64 w-64 rounded-2xl border border-line p-3" /><div className="mt-5 flex flex-wrap justify-center gap-2"><a href={employeeQr.qrDataUrl} download={`${employeeQr.employee.fullName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-attendance-qr.png`} className="rounded-2xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white">Download QR</a><button onClick={() => window.print()} className="rounded-2xl border border-line px-4 py-2.5 text-sm font-semibold text-slate-700">Print</button><button onClick={() => setEmployeeQr(null)} className="rounded-2xl border border-line px-4 py-2.5 text-sm font-semibold text-slate-700">Close</button></div></div></div> : null}
       {selectedEmployee ? <EmployeeViewModal employee={selectedEmployee} documents={documents} attendance={attendance} onClose={() => setSelectedEmployee(null)} /> : null}
       {pendingDelete ? <DeleteModal title="Remove this employee?" onCancel={() => setPendingDelete(null)} onConfirm={() => void deleteEmployee(pendingDelete)} confirmLabel="Delete Employee" /> : null}

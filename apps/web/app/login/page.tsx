@@ -12,6 +12,13 @@ type AuthSession = {
   user: { id: string; email: string; name: string; role: string; tenantId: string; tenantName?: string; enabledModules?: string[] };
 };
 
+function ProviderLogo({ provider }: { provider: "google" | "microsoft" }) {
+  if (provider === "microsoft") {
+    return <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path fill="#f35325" d="M2 2h9.5v9.5H2z" /><path fill="#81bc06" d="M12.5 2H22v9.5h-9.5z" /><path fill="#05a6f0" d="M2 12.5h9.5V22H2z" /><path fill="#ffba08" d="M12.5 12.5H22V22h-9.5z" /></svg>;
+  }
+  return <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true"><path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.42-.18-2.09H12v3.96h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.26Z" /><path fill="#34A853" d="M12 21.6c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.93-3.31.93-2.54 0-4.69-1.72-5.46-4.03H3.3v2.53A9.74 9.74 0 0 0 12 21.6Z" /><path fill="#FBBC05" d="M6.54 13.69A5.85 5.85 0 0 1 6.24 12c0-.59.1-1.16.3-1.69V7.78H3.3A9.75 9.75 0 0 0 2.25 12c0 1.57.38 3.05 1.05 4.22l3.24-2.53Z" /><path fill="#EA4335" d="M12 6.28c1.43 0 2.72.49 3.73 1.45l2.8-2.8C16.84 3.36 14.63 2.4 12 2.4a9.74 9.74 0 0 0-8.7 5.38l3.24 2.53C7.31 8 9.46 6.28 12 6.28Z" /></svg>;
+}
+
 function getWorkspaceFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const queryWorkspace = params.get("workspace") || params.get("tenant");
@@ -310,11 +317,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,#edf5ff_0%,#f6f9ff_35%,#eef3ff_100%)] px-4 py-4 md:px-6 md:py-5">
-      <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-3xl flex-col items-center justify-center md:min-h-[calc(100vh-2.5rem)]">
-        <div className="w-full max-w-[560px] rounded-[28px] border border-white/70 bg-white/95 p-5 shadow-[0_20px_60px_rgba(84,113,181,0.14)] md:p-6">
-          <div className="mx-auto grid h-14 w-14 place-items-center overflow-hidden rounded-full border border-line bg-white text-[11px] font-semibold text-ink md:h-16 md:w-16 md:text-xs">
-            {branding.logoUrl ? <img src={branding.logoUrl} alt={`${branding.name} logo`} className="h-full w-full object-cover" /> : "POP IN"}
+    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,#dce8ff_0%,transparent_38%),radial-gradient(circle_at_bottom_right,#f5dcff_0%,transparent_34%),linear-gradient(135deg,#f7fbff_0%,#eef4ff_48%,#fff8fc_100%)] px-4 py-4 md:px-6 md:py-5">
+      <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-cyan-300/20 blur-3xl" />
+      <div className="pointer-events-none absolute -right-20 bottom-10 h-80 w-80 rounded-full bg-fuchsia-300/20 blur-3xl" />
+      <div className="relative z-10 mx-auto flex min-h-[calc(100vh-2rem)] max-w-3xl flex-col items-center justify-center md:min-h-[calc(100vh-2.5rem)]">
+        <div className="w-full max-w-[560px] rounded-[28px] border border-white/80 bg-white/90 p-5 shadow-[0_24px_70px_rgba(70,92,160,0.18)] backdrop-blur-xl md:p-6">
+          <div className="mx-auto grid h-16 w-16 place-items-center overflow-hidden rounded-[22px] border border-white/80 bg-gradient-to-br from-brand-500 via-blue-600 to-fuchsia-500 text-[11px] font-bold text-white shadow-[0_12px_24px_rgba(47,91,234,0.25)] md:h-20 md:w-20 md:text-xs">
+            {branding.logoUrl ? <img src={branding.logoUrl} alt={`${branding.name} logo`} className="h-full w-full bg-white p-2 object-contain" /> : "POP IN"}
           </div>
           <div className="mx-auto mt-4 max-w-[500px] text-center md:mt-5">
             <h1 className="text-[1.75rem] font-semibold tracking-[-0.03em] text-ink md:text-[2rem]">{branding.name}</h1>
@@ -368,7 +377,7 @@ export default function LoginPage() {
               {(["google", "microsoft"] as const).map((providerKey) => {
                 const provider = branding.oauthProviders.find((item) => item.provider === providerKey);
                 const name = providerKey === "google" ? "Google" : "Microsoft";
-                return <button key={providerKey} type="button" disabled={oauthLoading !== null || !provider?.configured} onClick={() => void startOAuth(providerKey)} className="rounded-2xl border border-line px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-soft disabled:cursor-not-allowed disabled:opacity-50">{oauthLoading === providerKey ? "Redirecting..." : provider?.configured ? `Continue with ${name}` : `${name} unavailable`}</button>;
+                return <button key={providerKey} type="button" disabled={oauthLoading !== null || !provider?.configured} onClick={() => void startOAuth(providerKey)} className={`flex items-center justify-center gap-2 rounded-2xl border border-line px-4 py-3 text-sm font-semibold transition ${provider?.configured ? "bg-white text-slate-700 hover:border-brand-200 hover:bg-brand-50/60" : "bg-slate-50/80 text-slate-400"} disabled:cursor-not-allowed disabled:opacity-70`}><span className="grid h-6 w-6 place-items-center rounded-full bg-white"><ProviderLogo provider={providerKey} /></span>{oauthLoading === providerKey ? "Redirecting..." : provider?.configured ? `Continue with ${name}` : `${name} unavailable`}</button>;
               })}
             </div>
             {!branding.oauthProviders.some((provider) => provider.configured) ? <p className="mt-2 text-center text-xs text-slate-500">OAuth sign-in is not configured for this workspace yet.</p> : null}
