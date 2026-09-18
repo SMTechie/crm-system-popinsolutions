@@ -1,6 +1,11 @@
 import { getStoredSession } from "@/lib/session";
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === "production" ? "/api/v1" : "http://localhost:4000/api/v1");
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+const configuredLocalhost = Boolean(configuredApiUrl && /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(configuredApiUrl));
+
+export const API_BASE_URL = process.env.NODE_ENV === "production"
+  ? configuredApiUrl && !configuredLocalhost ? configuredApiUrl : "/api/v1"
+  : configuredApiUrl || "http://localhost:4000/api/v1";
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const session = getStoredSession();
