@@ -4,7 +4,7 @@ Enterprise-grade modular CRM foundation for Pop In Solutions.
 
 ## What is included
 
-- `apps/web`: Next.js App Router frontend with dashboards for CRM, Accounting, HR, and a working custom form builder experience.
+- Root Next.js App Router frontend with dashboards for CRM, Accounting, HR, and a working custom form builder experience.
 - `apps/api`: NestJS service skeleton with multi-tenant-ready modules and API contracts.
 - `apps/api/prisma/schema.prisma`: PostgreSQL schema for CRM, accounting, HR, workflows, forms, files, and audit logging.
 - `docs/`: Architecture, frontend structure, and API design documentation.
@@ -33,7 +33,7 @@ See [docs/implementation-status.md](docs/implementation-status.md) for database 
 
 ## Deploying to Vercel
 
-Deploy the repository root as a Next.js project. The existing `vercel.json` builds `apps/web` with the workspace build command.
+Deploy the repository root as a Next.js project. The root `vercel.json` uses the root `next` build directly, so no Vercel Root Directory override is needed.
 
 Set this required Vercel environment variable for Production, Preview, and Development:
 
@@ -43,4 +43,4 @@ NEXT_PUBLIC_API_URL=https://your-api-domain.example.com/api/v1
 
 Deploy `apps/api` separately as a Node/Docker service. Configure its `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `WEB_APP_URL` (the Vercel URL), `APP_BASE_URL` (the API URL), and production object storage variables. Do not use local file storage in production. Add the Vercel domain to the API CORS configuration through `WEB_APP_URL`.
 
-The web production build can be verified locally with `npm run build -w apps/web`; the API build uses `npm run build -w apps/api`.
+The web production build can be verified locally with `npm run build`; the API build uses `npm run build:api`.
