@@ -5,6 +5,7 @@
   "scripts": {
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "prebuild": "npm run db:generate",
     "build": "nest build",
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
