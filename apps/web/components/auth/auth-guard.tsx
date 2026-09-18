@@ -46,6 +46,7 @@ export function AuthGuard({ children, onResolved }: AuthGuardProps) {
           tenantId: string;
           tenantName?: string;
           enabledModules?: string[];
+          profilePictureUrl?: string | null;
         };
 
         const resolvedSession: SessionUser = {
@@ -57,6 +58,7 @@ export function AuthGuard({ children, onResolved }: AuthGuardProps) {
           tenantId: me.tenantId,
           tenantName: me.tenantName,
           enabledModules: me.enabledModules ?? activeSession.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"],
+          profilePictureUrl: me.profilePictureUrl ?? activeSession.profilePictureUrl,
         };
 
         storeSession(resolvedSession);

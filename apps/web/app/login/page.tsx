@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { Camera, Clock3, X } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api";
 import { storeSession, getStoredSession } from "@/lib/session";
+import { SHOW_GUIDE_AFTER_LOGIN_KEY } from "@/components/onboarding/permission-walkthrough";
 
 type AuthSession = {
   accessToken: string;
   refreshToken?: string;
-  user: { id: string; email: string; name: string; role: string; tenantId: string; tenantName?: string; enabledModules?: string[] };
+  user: { id: string; email: string; name: string; role: string; tenantId: string; tenantName?: string; enabledModules?: string[]; profilePictureUrl?: string | null };
 };
 
 function ProviderLogo({ provider }: { provider: "google" | "microsoft" }) {
@@ -176,9 +177,11 @@ export default function LoginPage() {
       tenantId: session.user.tenantId,
       tenantName: session.user.tenantName,
       enabledModules: session.user.enabledModules ?? ["crm", "accounting", "hr", "attendance", "assets", "projects", "users", "settings"],
+      profilePictureUrl: session.user.profilePictureUrl,
       token: session.accessToken,
       refreshToken: session.refreshToken,
     });
+    window.sessionStorage.setItem(SHOW_GUIDE_AFTER_LOGIN_KEY, "true");
     router.push(nextRoute);
   }
 

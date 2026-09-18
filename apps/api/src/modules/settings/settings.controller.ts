@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Req, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { memoryStorage } from "multer";
 import { UserRole } from "@prisma/client";
@@ -135,11 +135,40 @@ export class SettingsController {
     };
   }
 
+  @Get("profile")
+  async getProfile(@Req() request: { user: { sub: string } }) {
+    const user = await this.prisma.user.findUnique({ where: { id: request.user.sub }, select: { id: true, fullName: true, email: true, phone: true, role: true, profilePictureUrl: true } });
+    if (!user) throw new BadRequestException("User profile was not found.");
+    return { item: user };
+  }
+
+  @Patch("profile")
+  async updateProfile(@Req() request: { user: { sub: string } }, @Body() body: { fullName?: string; phone?: string | null }) {
+    const fullName = body.fullName?.trim();
+    if (!fullName) throw new BadRequestException("Full name is required.");
+    if (fullName.length > 120) throw new BadRequestException("Full name is too long.");
+    const user = await this.prisma.user.update({ where: { id: request.user.sub }, data: { fullName, phone: body.phone?.trim() || null }, select: { id: true, fullName: true, email: true, phone: true, role: true, profilePictureUrl: true } });
+    return { item: user };
+  }
+
+  @Post("profile/picture")
+  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 }, fileFilter: (_request, file, callback) => callback(null, ["image/png", "image/jpeg", "image/webp"].includes(file.mimetype ?? "")) }))
+  async uploadProfilePicture(@Req() request: { user: { sub: string } }, @UploadedFile() file?: { buffer: Buffer; originalname: string; mimetype: string }) {
+    if (!file) throw new BadRequestException("A PNG, JPEG, or WebP profile picture is required.");
+    const existing = await this.prisma.user.findUnique({ where: { id: request.user.sub }, select: { profilePictureUrl: true } });
+    if (!existing) throw new BadRequestException("User profile was not found.");
+    const fileKey = await this.storage.put({ buffer: file.buffer, originalName: file.originalname, mimeType: file.mimetype });
+    const profilePictureUrl = fileKey.startsWith("http") ? fileKey : `${process.env.APP_BASE_URL || "http://localhost:4000"}${fileKey}`;
+    await this.prisma.user.update({ where: { id: request.user.sub }, data: { profilePictureUrl } });
+    if (existing.profilePictureUrl && !existing.profilePictureUrl.includes("://")) await this.storage.remove(existing.profilePictureUrl);
+    return { profilePictureUrl };
+  }
+
   @Post("permissions")
   @RequiresPermission("settings.manage")
   async createPermission(@Tenant() tenantId: string, @Body() body: { key?: string; description?: string }) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
-    const key = body.key?.trim().toLowerCase();
+    const key = body.key?.trim().toLowerCase().replace(/\s+/g, ".");
     if (!key || !/^[a-z0-9]+(?:[._-][a-z0-9]+)+$/.test(key)) throw new BadRequestException("Permission keys must use a format such as crm.customers.view.");
     const existing = await this.prisma.permission.findUnique({ where: { tenantId_key: { tenantId: tenant.id, key } } });
     if (existing) throw new BadRequestException("That permission already exists.");

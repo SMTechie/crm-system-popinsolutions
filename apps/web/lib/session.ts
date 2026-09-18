@@ -8,6 +8,7 @@ export type SessionUser = {
   tenantId: string;
   tenantName?: string;
   enabledModules: string[];
+  profilePictureUrl?: string | null;
   token: string;
   refreshToken?: string;
 };

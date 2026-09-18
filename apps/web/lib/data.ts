@@ -72,7 +72,7 @@ export const moduleCards: ModuleCard[] = [
       { title: "Expenses", subtitle: "Cost and vendor tracking", href: "/accounting/expenses", icon: Receipt },
       { title: "Payments", subtitle: "Collections and status", href: "/accounting/payments", icon: Radar },
       { title: "Contributions", subtitle: "Monthly client payments", href: "/accounting/contributions", icon: WalletCards },
-      { title: "Customers", subtitle: "Client billing accounts", href: "/accounting/customers", icon: Building2 },
+      { title: "Companies", subtitle: "Client billing accounts", href: "/accounting/customers", icon: Building2 },
       { title: "Vendors", subtitle: "Supplier spend profiles", href: "/accounting/vendors", icon: Building },
       { title: "Banking", subtitle: "Cash and account balances", href: "/accounting/banking", icon: Landmark },
       { title: "Transactions", subtitle: "Ledger movement", href: "/accounting/transactions", icon: WalletCards },

@@ -44,7 +44,7 @@ const accountingSubmodules: Record<string, { title: string; description: string;
     component: <LivePaymentsPage />,
   },
   customers: {
-    title: "Accounting Customers",
+    title: "Accounting Companies",
     description: "See billed customers, invoice volume, receivables, and account totals.",
     component: <LiveCustomers />,
   },

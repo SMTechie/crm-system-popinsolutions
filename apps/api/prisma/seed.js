@@ -139,22 +139,40 @@ async function main() {
   for (const permission of permissions) {
     await prisma.rolePermission.upsert({ where: { roleId_permissionId: { roleId: ownerRole.id, permissionId: permission.id } }, update: {}, create: { roleId: ownerRole.id, permissionId: permission.id } });
   }
+
+  const companyPositions = [
+    ["Sales Manager", "Leads sales pipeline and customer relationship activity.", ["crm.customers.view", "crm.customers.create", "crm.customers.edit", "reports.view"]],
+    ["Project Manager", "Coordinates projects, tasks, and delivery workflows.", ["projects.view", "projects.manage", "reports.view"]],
+    ["IT Manager", "Manages systems, assets, access, and operational support.", ["assets.view", "assets.create", "assets.assign", "assets.return", "users.view", "users.manage", "settings.manage"]],
+    ["Operations Manager", "Oversees attendance, assets, and daily operations.", ["attendance.view", "attendance.manage", "assets.view", "assets.assign", "reports.view"]],
+    ["Customer Support Agent", "Handles customer records and support activity.", ["crm.customers.view", "crm.customers.create", "crm.customers.edit", "attendance.view"]],
+    ["Marketing Manager", "Manages customer engagement and reporting activity.", ["crm.customers.view", "crm.customers.create", "crm.customers.edit", "reports.view"]],
+  ];
+  for (const [name, description, rolePermissionKeys] of companyPositions) {
+    const position = await prisma.role.upsert({ where: { tenantId_name: { tenantId: tenant.id, name } }, update: { description }, create: { tenantId: tenant.id, name, description } });
+    for (const key of rolePermissionKeys) {
+      const permission = permissions.find((item) => item.key === key);
+      if (permission) await prisma.rolePermission.upsert({ where: { roleId_permissionId: { roleId: position.id, permissionId: permission.id } }, update: {}, create: { roleId: position.id, permissionId: permission.id } });
+    }
+  }
+
+  await prisma.role.deleteMany({ where: { tenantId: tenant.id, name: { in: ["Demo Administrator", "Demo Finance Manager", "Demo HR Manager", "Demo Employee"] } } });
   await prisma.userRoleAssignment.upsert({ where: { userId_roleId: { userId: user.id, roleId: ownerRole.id } }, update: {}, create: { userId: user.id, roleId: ownerRole.id } });
   const demoUsers = [];
   for (const demo of [
-    ["admin@example.com", "Demo Administrator", UserRole.ADMIN],
-    ["finance@example.com", "Demo Finance Manager", UserRole.ACCOUNTANT],
-    ["hr@example.com", "Demo HR Manager", UserRole.HR_MANAGER],
-    ["employee@example.com", "Demo Employee", UserRole.EMPLOYEE],
+    ["admin@example.com", "Administrator", UserRole.ADMIN],
+    ["finance@example.com", "Finance Manager", UserRole.ACCOUNTANT],
+    ["hr@example.com", "HR Manager", UserRole.HR_MANAGER],
+    ["employee@example.com", "Employee", UserRole.EMPLOYEE],
   ]) {
     const demoUser = await prisma.user.upsert({ where: { tenantId_email: { tenantId: tenant.id, email: demo[0] } }, update: { fullName: demo[1], role: demo[2], status: "ACTIVE", emailVerifiedAt: new Date(), passwordHash: hashPassword("PopIn@2026!Demo") }, create: { tenantId: tenant.id, email: demo[0], fullName: demo[1], role: demo[2], status: "ACTIVE", emailVerifiedAt: new Date(), passwordHash: hashPassword("PopIn@2026!Demo") } });
     demoUsers.push(demoUser);
   }
   const demoRolePermissions = {
-    "Demo Administrator": permissionKeys,
-    "Demo Finance Manager": ["accounting.invoices.view", "accounting.invoices.create", "accounting.invoices.approve", "reports.view"],
-    "Demo HR Manager": ["hr.employees.view", "hr.employees.edit", "attendance.view", "attendance.manage"],
-    "Demo Employee": ["attendance.view"],
+    Administrator: permissionKeys,
+    "Finance Manager": ["accounting.invoices.view", "accounting.invoices.create", "accounting.invoices.approve", "reports.view"],
+    "HR Manager": ["hr.employees.view", "hr.employees.edit", "attendance.view", "attendance.manage"],
+    Employee: ["attendance.view"],
   };
   for (const demoUser of demoUsers) {
     const roleName = demoUser.fullName;
@@ -453,6 +471,40 @@ async function main() {
   const seededQuote = await prisma.quote.upsert({ where: { tenantId_number: { tenantId: tenant.id, number: "QUO-2026-0001" } }, update: { customer: "Atlas Freight", status: "SENT", currency: "ZAR", subtotal: 52000, taxAmount: 7800, total: 59800, validUntil: new Date("2026-10-15T00:00:00.000Z") }, create: { tenantId: tenant.id, customer: "Atlas Freight", number: "QUO-2026-0001", status: "SENT", currency: "ZAR", subtotal: 52000, taxAmount: 7800, total: 59800, validUntil: new Date("2026-10-15T00:00:00.000Z") } });
   await prisma.quoteItem.upsert({ where: { id: `${seededQuote.id}-implementation` }, update: { description: "CRM implementation package", quantity: 1, unitPrice: 52000, taxRate: 15, lineTotal: 52000 }, create: { id: `${seededQuote.id}-implementation`, quoteId: seededQuote.id, description: "CRM implementation package", quantity: 1, unitPrice: 52000, taxRate: 15, lineTotal: 52000 } });
 
+  // Current invoice and quote forms are represented by Invoice records. Draft
+  // QUO numbers are therefore visible in the Quotes screen while retaining all
+  // of the updated billing, CRM-link, and line-item fields.
+  const updatedDocuments = [
+    {
+      number: "INV-2026-0005", customer: "Verta Group", billingEmail: "accounts@verta.co.za", billingPhone: "+27 11 000 2222", contactId: `${tenant.id}-zinhle@verta.co.za`, companyId: companies[1].id, purchaseOrder: "VG-PO-2026-091", description: "Monthly customer success and CRM support", notes: "Payment due within 30 days.", status: InvoiceStatus.PAID, subtotal: 31500, taxAmount: 4725, issuedAt: "2026-09-01T08:00:00.000Z", dueAt: "2026-10-01T08:00:00.000Z", paidAmount: 36225, items: [{ id: "support", description: "Customer success retainer", quantity: 1, unitPrice: 28000, discount: 0, taxRate: 15 }, { id: "training", description: "CRM training session", quantity: 1, unitPrice: 3500, discount: 0, taxRate: 15 }], payment: { provider: "Standard Bank", method: "BANK_TRANSFER", reference: "VG-PAY-2026-005", amount: 36225, receivedAt: "2026-09-20T10:00:00.000Z" },
+    },
+    {
+      number: "INV-2026-0006", customer: "Kibo Stores", billingEmail: "accounts@kibo.co.za", billingPhone: "+27 11 000 3333", contactId: `${tenant.id}-ernest@kibo.co.za`, companyId: companies[2].id, purchaseOrder: "KS-PO-418", description: "Field support and asset maintenance services", notes: "Please reference the invoice number with payment.", status: InvoiceStatus.SENT, subtotal: 18750, taxAmount: 2812.5, issuedAt: "2026-09-05T08:00:00.000Z", dueAt: "2026-10-05T08:00:00.000Z", paidAmount: 0, items: [{ id: "field-support", description: "Field support services", quantity: 3, unitPrice: 5000, discount: 0, taxRate: 15 }, { id: "maintenance", description: "Equipment maintenance", quantity: 1, unitPrice: 3750, discount: 0, taxRate: 15 }],
+    },
+    {
+      number: "INV-2026-0007", customer: "Atlas Freight", billingEmail: "finance@atlasfreight.co.za", billingPhone: "+27 11 000 1111", contactId: `${tenant.id}-lerato@atlasfreight.co.za`, companyId: companies[0].id, purchaseOrder: "AT-PO-777", description: "Operations dashboard implementation", notes: "Includes reporting dashboard configuration and handover.", status: InvoiceStatus.OVERDUE, subtotal: 64000, taxAmount: 9600, issuedAt: "2026-07-15T08:00:00.000Z", dueAt: "2026-08-15T08:00:00.000Z", paidAmount: 20000, items: [{ id: "dashboard", description: "Operations dashboard implementation", quantity: 1, unitPrice: 64000, discount: 0, taxRate: 15 }],
+    },
+    {
+      number: "QUO-2026-0002", customer: "Verta Group", billingEmail: "accounts@verta.co.za", billingPhone: "+27 11 000 2222", contactId: `${tenant.id}-zinhle@verta.co.za`, companyId: companies[1].id, purchaseOrder: "Verta CRM expansion", description: "Proposed CRM expansion and automation package", notes: "Quote valid for 30 days and subject to final scope approval.", status: InvoiceStatus.DRAFT, subtotal: 78000, taxAmount: 11700, issuedAt: "2026-09-18T08:00:00.000Z", dueAt: "2026-10-18T08:00:00.000Z", paidAmount: 0, items: [{ id: "automation", description: "CRM automation package", quantity: 1, unitPrice: 78000, discount: 0, taxRate: 15 }],
+    },
+    {
+      number: "QUO-2026-0003", customer: "Kibo Stores", billingEmail: "accounts@kibo.co.za", billingPhone: "+27 11 000 3333", contactId: `${tenant.id}-ernest@kibo.co.za`, companyId: companies[2].id, purchaseOrder: "Kibo support proposal", description: "Annual support and reporting proposal", notes: "Includes quarterly service reviews and priority support.", status: InvoiceStatus.DRAFT, subtotal: 45000, taxAmount: 6750, issuedAt: "2026-09-18T08:00:00.000Z", dueAt: "2026-10-18T08:00:00.000Z", paidAmount: 0, items: [{ id: "annual-support", description: "Annual support plan", quantity: 1, unitPrice: 36000, discount: 0, taxRate: 15 }, { id: "reporting", description: "Quarterly reporting setup", quantity: 1, unitPrice: 9000, discount: 0, taxRate: 15 }],
+    },
+  ];
+  for (const document of updatedDocuments) {
+    const total = document.subtotal + document.taxAmount;
+    const invoice = await prisma.invoice.upsert({
+      where: { tenantId_number: { tenantId: tenant.id, number: document.number } },
+      update: { customer: document.customer, billingEmail: document.billingEmail, billingPhone: document.billingPhone, contactId: document.contactId, companyId: document.companyId, purchaseOrder: document.purchaseOrder, description: document.description, notes: document.notes, status: document.status, currency: "ZAR", subtotal: document.subtotal, taxAmount: document.taxAmount, total, paidAmount: document.paidAmount, issuedAt: new Date(document.issuedAt), dueAt: new Date(document.dueAt) },
+      create: { tenantId: tenant.id, customer: document.customer, billingEmail: document.billingEmail, billingPhone: document.billingPhone, contactId: document.contactId, companyId: document.companyId, purchaseOrder: document.purchaseOrder, description: document.description, notes: document.notes, number: document.number, status: document.status, currency: "ZAR", subtotal: document.subtotal, taxAmount: document.taxAmount, total, paidAmount: document.paidAmount, issuedAt: new Date(document.issuedAt), dueAt: new Date(document.dueAt) },
+    });
+    for (const item of document.items) {
+      const lineTotal = item.quantity * item.unitPrice - item.discount;
+      await prisma.invoiceItem.upsert({ where: { id: `${invoice.id}-${item.id}` }, update: { description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, discount: item.discount, taxRate: item.taxRate, lineTotal }, create: { id: `${invoice.id}-${item.id}`, invoiceId: invoice.id, description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, discount: item.discount, taxRate: item.taxRate, lineTotal } });
+    }
+    if (document.payment) await prisma.payment.upsert({ where: { id: `${invoice.id}-payment` }, update: document.payment, create: { invoiceId: invoice.id, ...document.payment, id: `${invoice.id}-payment` } });
+  }
+
   const leratoContact = await prisma.contact.findUnique({ where: { id: `${tenant.id}-lerato@atlasfreight.co.za` } });
   if (leratoContact) {
     await prisma.activity.upsert({ where: { id: `${leratoContact.id}-kickoff` }, update: { type: "MEETING", title: "Implementation kickoff", occurredAt: new Date("2026-08-12T09:00:00.000Z"), ownerId: user.id }, create: { id: `${leratoContact.id}-kickoff`, tenantId: tenant.id, contactId: leratoContact.id, ownerId: user.id, type: "MEETING", title: "Implementation kickoff", occurredAt: new Date("2026-08-12T09:00:00.000Z") } });
@@ -709,6 +761,37 @@ async function main() {
 
   const lerato = await prisma.employee.findUnique({ where: { id: `${tenant.id}-lerato-dlamini` } });
   const ernest = await prisma.employee.findUnique({ where: { id: `${tenant.id}-ernest-molelekwa` } });
+  const demoEmployee = await prisma.employee.findUnique({ where: { id: `${tenant.id}-employee-demo` } });
+
+  // Seed a useful attendance history for every demo employee. The deterministic
+  // IDs and compound upsert keep this safe to run repeatedly.
+  const attendanceEmployees = [employee, lerato, ernest, demoEmployee].filter(Boolean);
+  for (const [employeeIndex, attendanceEmployee] of attendanceEmployees.entries()) {
+    await prisma.workSchedule.upsert({
+      where: { id: `${attendanceEmployee.id}-weekday-schedule` },
+      update: { weekdays: [1, 2, 3, 4, 5], startTime: "08:00", endTime: "17:00", breakMin: 60, timezone: "Africa/Johannesburg", active: true },
+      create: { id: `${attendanceEmployee.id}-weekday-schedule`, tenantId: tenant.id, employeeId: attendanceEmployee.id, weekdays: [1, 2, 3, 4, 5], startTime: "08:00", endTime: "17:00", breakMin: 60, timezone: "Africa/Johannesburg", active: true },
+    });
+
+    let seededDays = 0;
+    for (let offset = 0; offset < 24 && seededDays < 15; offset += 1) {
+      const date = new Date(demoToday);
+      date.setDate(date.getDate() - offset);
+      if (date.getDay() === 0 || date.getDay() === 6) continue;
+      const dateKey = date.toISOString().slice(0, 10);
+      const isAbsent = seededDays === 6 && employeeIndex % 2 === 0;
+      const isMissingClockOut = seededDays === 2 && employeeIndex % 2 === 1;
+      const isLate = seededDays === 1;
+      const checkInAt = isAbsent ? null : new Date(`${dateKey}T${isLate ? "08:28" : "07:58"}:00`);
+      const checkOutAt = isAbsent || isMissingClockOut ? null : new Date(`${dateKey}T17:04:00`);
+      await prisma.attendanceRecord.upsert({
+        where: { employeeId_date: { employeeId: attendanceEmployee.id, date } },
+        update: { status: isAbsent ? "ABSENT" : isLate ? "LATE" : "PRESENT", checkInAt, checkOutAt, officeLocationId: attendanceEmployee.officeLocationId, location: attendanceEmployee.officeLocationId === pretoriaOffice.id ? "-25.747900, 28.229300" : "-26.107600, 28.056700", clockInMethod: "WEB", notes: isAbsent ? "Scheduled absence" : isMissingClockOut ? "Awaiting clock-out" : isLate ? "Late arrival" : "Seeded demo attendance" },
+        create: { id: `${attendanceEmployee.id}-attendance-${dateKey}`, employeeId: attendanceEmployee.id, date, status: isAbsent ? "ABSENT" : isLate ? "LATE" : "PRESENT", checkInAt, checkOutAt, officeLocationId: attendanceEmployee.officeLocationId, location: attendanceEmployee.officeLocationId === pretoriaOffice.id ? "-25.747900, 28.229300" : "-26.107600, 28.056700", clockInMethod: "WEB", notes: isAbsent ? "Scheduled absence" : isMissingClockOut ? "Awaiting clock-out" : isLate ? "Late arrival" : "Seeded demo attendance" },
+      });
+      seededDays += 1;
+    }
+  }
 
   if (lerato) {
     await prisma.attendanceRecord.deleteMany({ where: { id: `${lerato.id}-attendance-2026-08-04` } });

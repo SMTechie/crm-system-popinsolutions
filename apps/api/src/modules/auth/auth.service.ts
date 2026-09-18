@@ -146,12 +146,12 @@ export class AuthService {
     return this.issueTokens(ticket.user);
   }
 
-  private async issueTokens(user: { id: string; email: string; fullName: string; role: string; tenant: { id: string; slug: string; name: string; enabledModules: string[]; sessionTimeoutMinutes?: number } }) {
+  private async issueTokens(user: { id: string; email: string; fullName: string; role: string; profilePictureUrl?: string | null; tenant: { id: string; slug: string; name: string; enabledModules: string[]; sessionTimeoutMinutes?: number } }) {
     const accessTtl = Math.max(5, user.tenant.sessionTimeoutMinutes ?? 480) * 60;
     const accessToken = this.signToken({ sub: user.id, tenantId: user.tenant.slug, email: user.email, role: user.role }, accessTtl);
     const refreshToken = randomBytes(48).toString("base64url");
     await this.prisma.session.create({ data: { tenantId: user.tenant.id, userId: user.id, tokenHash: this.hashToken(refreshToken), expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30) } });
-    return { accessToken, refreshToken, user: { id: user.id, email: user.email, name: user.fullName, role: user.role, tenantId: user.tenant.slug, tenantName: user.tenant.name, enabledModules: user.tenant.enabledModules } };
+    return { accessToken, refreshToken, user: { id: user.id, email: user.email, name: user.fullName, role: user.role, tenantId: user.tenant.slug, tenantName: user.tenant.name, enabledModules: user.tenant.enabledModules, profilePictureUrl: user.profilePictureUrl ?? null } };
   }
 
   private async issueEmailVerification(userId: string, tenantId: string) {
@@ -389,6 +389,7 @@ export class AuthService {
         tenantId: tenant.slug,
         tenantName: tenant.name,
         enabledModules: tenant.enabledModules,
+        profilePictureUrl: user.profilePictureUrl,
       },
       tenant: {
         id: tenant.id,
@@ -444,6 +445,7 @@ export class AuthService {
       tenantId: user.tenant.slug,
       tenantName: user.tenant.name,
       enabledModules: user.tenant.enabledModules,
+      profilePictureUrl: user.profilePictureUrl,
     };
   }
 }

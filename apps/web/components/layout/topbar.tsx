@@ -8,7 +8,7 @@ import {
   ChevronDown,
   LogOut,
   MoonStar,
-  Settings2,
+  UserRound,
 } from "lucide-react";
 import { API_BASE_URL, apiFetch } from "@/lib/api";
 import { moduleCards } from "@/lib/data";
@@ -293,13 +293,7 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
                 onClick={() => setProfileOpen((current) => !current)}
                 className="theme-text flex items-center gap-2 rounded-2xl border border-transparent px-2 py-1 text-slate-700 transition hover:bg-soft"
               >
-                <div className="theme-surface grid h-9 w-9 place-items-center rounded-full border border-line bg-white text-xs font-semibold">
-                  {user?.name
-                    ?.split(" ")
-                    .map((part) => part[0])
-                    .join("")
-                    .slice(0, 2) ?? "PI"}
-                </div>
+                {user?.profilePictureUrl ? <img src={user.profilePictureUrl} alt="" className="h-9 w-9 rounded-full border border-line object-cover" /> : <div className="theme-surface grid h-9 w-9 place-items-center rounded-full border border-line bg-white text-xs font-semibold">{user?.name?.split(" ").map((part) => part[0]).join("").slice(0, 2) ?? "PI"}</div>}
                 <div className="hidden text-left sm:block">
                   <p className="theme-text text-sm font-semibold text-ink">{user?.name ?? "Workspace User"}</p>
                   <p className="theme-subtext text-xs text-slate-500">{user?.email ?? "team@popinsolutions.co.za"}</p>
@@ -316,11 +310,12 @@ export function Topbar({ user, pageTitle }: TopbarProps) {
                   </div>
                   <div className="mt-2 space-y-2">
                     <Link
-                      href="/settings"
+                      href="/profile"
+                      onClick={() => setProfileOpen(false)}
                       className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 transition hover:bg-soft"
                     >
-                      <Settings2 className="h-4 w-4 text-brand-500" />
-                      <span className="theme-text text-sm font-medium text-ink">Workspace Settings</span>
+                      <UserRound className="h-4 w-4 text-brand-500" />
+                      <span className="theme-text text-sm font-medium text-ink">My Profile</span>
                     </Link>
                     <button
                       onClick={signOut}

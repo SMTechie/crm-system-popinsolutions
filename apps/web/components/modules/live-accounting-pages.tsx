@@ -466,6 +466,7 @@ function InvoiceModal({
   buttonLabel: string;
   documentType?: "Invoice" | "Quote";
 }) {
+  const financialFieldsLocked = Boolean(form.id && form.status !== "DRAFT");
   const selectedContact = contacts.find((contact) => contact.id === form.contactId);
   const issuedDisplay = form.issuedAt ? new Date(form.issuedAt).toLocaleDateString("en-ZA") : "Today";
   const dueDisplay = form.dueAt ? new Date(form.dueAt).toLocaleDateString("en-ZA") : "Set due date";
@@ -485,9 +486,10 @@ function InvoiceModal({
   const removeLine = (index: number) => setForm((current) => ({ ...current, lineItems: current.lineItems.length === 1 ? current.lineItems : current.lineItems.filter((_, lineIndex) => lineIndex !== index) }));
 
   return (
-    <BaseModal label={title} title={`Create a branded ${documentType.toLowerCase()}`} onClose={onClose} onSave={onSave} saveLabel={buttonLabel}>
+    <BaseModal label={title} title={`${form.id ? "Update" : "Create"} a branded ${documentType.toLowerCase()}`} onClose={onClose} onSave={onSave} saveLabel={buttonLabel}>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(420px,0.88fr)]">
         <div className="grid gap-3 md:grid-cols-2">
+          {financialFieldsLocked ? <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 md:col-span-2">This posted invoice has locked financial values. Update the customer details or notes only; use a credit note or reversal to change the totals.</div> : null}
           <select
             value={form.contactId}
             onChange={(event) => {
@@ -520,19 +522,19 @@ function InvoiceModal({
           <div className="rounded-3xl border border-line bg-slate-50/70 p-4 md:col-span-2">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div><p className="text-sm font-semibold text-ink">Invoice items</p><p className="text-xs text-slate-500">Add products or services, discounts, and tax per line.</p></div>
-              <button type="button" onClick={addLine} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-2 text-xs font-semibold text-white"><Plus className="h-3.5 w-3.5" /> Add item</button>
+              <button type="button" onClick={addLine} disabled={financialFieldsLocked} className="inline-flex items-center gap-1.5 rounded-xl bg-brand-500 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"><Plus className="h-3.5 w-3.5" /> Add item</button>
             </div>
             <div className="space-y-2">
               {form.lineItems.map((line, index) => {
                 const lineTotal = Math.max(0, (Number(line.quantity) || 0) * (Number(line.unitPrice) || 0) - (Number(line.discount) || 0));
                 return <div key={index} className="grid gap-2 rounded-2xl border border-line bg-white p-3 md:grid-cols-[minmax(0,1.6fr)_80px_110px_100px_85px_110px_32px] md:items-end">
-                  <label className="text-xs font-medium text-slate-500">Description<input value={line.description} onChange={(event) => updateLine(index, "description", event.target.value)} placeholder="Product or service" className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
-                  <label className="text-xs font-medium text-slate-500">Qty<input type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
-                  <label className="text-xs font-medium text-slate-500">Unit price<input type="number" min="0" step="0.01" value={line.unitPrice} onChange={(event) => updateLine(index, "unitPrice", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
-                  <label className="text-xs font-medium text-slate-500">Discount<input type="number" min="0" step="0.01" value={line.discount} onChange={(event) => updateLine(index, "discount", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
-                  <label className="text-xs font-medium text-slate-500">Tax %<input type="number" min="0" step="0.01" value={line.taxRate} onChange={(event) => updateLine(index, "taxRate", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500" /></label>
+                  <label className="text-xs font-medium text-slate-500">Description<input disabled={financialFieldsLocked} value={line.description} onChange={(event) => updateLine(index, "description", event.target.value)} placeholder="Product or service" className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500" /></label>
+                  <label className="text-xs font-medium text-slate-500">Qty<input disabled={financialFieldsLocked} type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500" /></label>
+                  <label className="text-xs font-medium text-slate-500">Unit price<input disabled={financialFieldsLocked} type="number" min="0" step="0.01" value={line.unitPrice} onChange={(event) => updateLine(index, "unitPrice", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500" /></label>
+                  <label className="text-xs font-medium text-slate-500">Discount<input disabled={financialFieldsLocked} type="number" min="0" step="0.01" value={line.discount} onChange={(event) => updateLine(index, "discount", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500" /></label>
+                  <label className="text-xs font-medium text-slate-500">Tax %<input disabled={financialFieldsLocked} type="number" min="0" step="0.01" value={line.taxRate} onChange={(event) => updateLine(index, "taxRate", event.target.value)} className="mt-1 w-full rounded-xl border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-brand-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500" /></label>
                   <div><p className="text-xs font-medium text-slate-500">Line total</p><p className="mt-1 rounded-xl bg-soft px-3 py-2.5 text-sm font-semibold text-ink">{formatMoney(lineTotal)}</p></div>
-                  <button type="button" onClick={() => removeLine(index)} disabled={form.lineItems.length === 1} aria-label="Remove item" className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => removeLine(index)} disabled={financialFieldsLocked || form.lineItems.length === 1} aria-label="Remove item" className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-200 text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
                 </div>;
               })}
             </div>
@@ -542,10 +544,10 @@ function InvoiceModal({
           <textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Notes / payment terms" rows={3} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 md:col-span-2" />
           <div className="rounded-2xl border border-line bg-soft/50 px-4 py-3 text-sm text-slate-600">Calculated subtotal <strong className="text-ink">{formatMoney(totals.subtotal)}</strong></div>
           <div className="rounded-2xl border border-line bg-soft/50 px-4 py-3 text-sm text-slate-600">Calculated tax <strong className="text-ink">{formatMoney(totals.tax)}</strong></div>
-          <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500">
+          <select disabled={financialFieldsLocked} value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500">
             {["DRAFT", "SENT", "PAID", "OVERDUE", "VOID"].map((status) => <option key={status} value={status}>{status}</option>)}
           </select>
-          <input value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} placeholder="Currency" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500" />
+          <input disabled={financialFieldsLocked} value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} placeholder="Currency" className="w-full rounded-2xl border border-line px-4 py-3 text-sm outline-none transition focus:border-brand-500 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500" />
         </div>
         <div className="rounded-[28px] border border-line bg-soft/40 p-5 xl:sticky xl:top-6">
           <div className="flex items-start justify-between gap-4">
@@ -818,6 +820,7 @@ function DerivedTable({
   search,
   setSearch,
   placeholder,
+  loading = false,
 }: {
   label: string;
   title: string;
@@ -827,6 +830,7 @@ function DerivedTable({
   search: string;
   setSearch: (value: string) => void;
   placeholder: string;
+  loading?: boolean;
 }) {
   return (
     <Card className="overflow-hidden">
@@ -839,12 +843,13 @@ function DerivedTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
+            {loading ? <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-slate-500"><span className="inline-flex items-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500" />Loading data from the database...</span></td></tr> : null}
+            {!loading ? rows.map((row, index) => (
               <tr key={index} className="border-b border-line transition hover:bg-soft/40">
                 {columns.map((column) => <td key={column.key} className={`px-4 py-3 text-xs text-slate-600 md:text-sm ${column.align === "right" ? "text-right font-semibold text-brand-500" : ""}`}>{row[column.key]}</td>)}
               </tr>
-            ))}
-            {rows.length === 0 ? <tr><td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-slate-500">No records available.</td></tr> : null}
+            )) : null}
+            {!loading && rows.length === 0 ? <tr><td colSpan={columns.length} className="px-4 py-8 text-center text-sm text-slate-500">No records available.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -871,6 +876,7 @@ export function LiveInvoices() {
 
   async function saveInvoice() {
     try {
+      const postedInvoice = Boolean(form.id && form.status !== "DRAFT");
       const payload = {
         customer: form.customer || undefined,
         billingEmail: form.billingEmail || undefined,
@@ -881,11 +887,11 @@ export function LiveInvoices() {
         notes: form.notes || undefined,
         issuedAt: form.issuedAt ? new Date(form.issuedAt).toISOString() : undefined,
         dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : undefined,
-        subtotal: form.subtotal ? Number(form.subtotal) : undefined,
-        taxAmount: form.taxAmount ? Number(form.taxAmount) : undefined,
-        lineItems: form.id && form.status !== "DRAFT" ? undefined : form.lineItems.filter((line) => line.description.trim()).map((line) => ({ description: line.description, quantity: Number(line.quantity), unitPrice: Number(line.unitPrice), discount: Number(line.discount || 0), taxRate: Number(line.taxRate || 0) })),
-        status: form.status,
-        currency: form.currency || undefined,
+        subtotal: postedInvoice ? undefined : (form.subtotal ? Number(form.subtotal) : undefined),
+        taxAmount: postedInvoice ? undefined : (form.taxAmount ? Number(form.taxAmount) : undefined),
+        lineItems: postedInvoice ? undefined : form.lineItems.filter((line) => line.description.trim()).map((line) => ({ description: line.description, quantity: Number(line.quantity), unitPrice: Number(line.unitPrice), discount: Number(line.discount || 0), taxRate: Number(line.taxRate || 0) })),
+        status: postedInvoice ? undefined : form.status,
+        currency: postedInvoice ? undefined : (form.currency || undefined),
       };
       const linkedPayload = {
         ...payload,
@@ -1020,7 +1026,7 @@ export function LiveQuotes() {
           <table className="min-w-full text-left">
             <thead className="border-b border-line bg-slate-50/70"><tr className="text-[11px] uppercase tracking-[0.14em] text-slate-500"><th className="px-4 py-2.5 font-semibold">Quote</th><th className="px-4 py-2.5 font-semibold">Customer</th><th className="px-4 py-2.5 font-semibold">Value</th><th className="px-4 py-2.5 text-right font-semibold">Actions</th></tr></thead>
             <tbody>
-              {filtered.map((quote) => <tr key={quote.id} onClick={() => setSelectedQuote(quote)} className="cursor-pointer border-b border-line transition hover:bg-soft/40"><td className="px-4 py-3 text-sm font-semibold text-ink">{quote.number}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{quote.customer}</td><td className="px-4 py-3 text-xs font-semibold text-brand-500 md:text-sm">{quote.currency} {Number(quote.total).toLocaleString()}</td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={(event) => { event.stopPropagation(); setForm({ id: quote.id, customer: quote.customer, billingEmail: quote.billingEmail ?? "", billingPhone: quote.billingPhone ?? "", contactId: quote.contactId ?? "", companyId: quote.companyId ?? "", number: quote.number ?? "", purchaseOrder: quote.purchaseOrder ?? "", description: quote.description ?? "", notes: quote.notes ?? "", issuedAt: quote.issuedAt?.slice(0, 10) ?? "2026-08-04", dueAt: quote.dueAt?.slice(0, 10) ?? "2026-08-18", subtotal: String(Number(quote.subtotal)), taxAmount: String(Number(quote.taxAmount)), status: "DRAFT", currency: quote.currency, lineItems: emptyInvoice.lineItems }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button></div></td></tr>)}
+              {filtered.map((quote) => <tr key={quote.id} onClick={() => setSelectedQuote(quote)} className="cursor-pointer border-b border-line transition hover:bg-soft/40"><td className="px-4 py-3 text-sm font-semibold text-ink">{quote.number}</td><td className="px-4 py-3 text-xs text-slate-600 md:text-sm">{quote.customer}</td><td className="px-4 py-3 text-xs font-semibold text-brand-500 md:text-sm">{quote.currency} {Number(quote.total).toLocaleString()}</td><td className="px-4 py-3"><div className="flex items-center justify-end gap-2"><button onClick={(event) => { event.stopPropagation(); setForm({ id: quote.id, customer: quote.customer, billingEmail: quote.billingEmail ?? "", billingPhone: quote.billingPhone ?? "", contactId: quote.contactId ?? "", companyId: quote.companyId ?? "", number: quote.number ?? "", purchaseOrder: quote.purchaseOrder ?? "", description: quote.description ?? "", notes: quote.notes ?? "", issuedAt: quote.issuedAt?.slice(0, 10) ?? "2026-08-04", dueAt: quote.dueAt?.slice(0, 10) ?? "2026-08-18", subtotal: String(Number(quote.subtotal)), taxAmount: String(Number(quote.taxAmount)), status: "DRAFT", currency: quote.currency, lineItems: (quote.items ?? []).map((line) => ({ id: line.id, description: line.description, quantity: String(Number(line.quantity)), unitPrice: String(Number(line.unitPrice)), discount: String(Number(line.discount)), taxRate: String(Number(line.taxRate)), lineTotal: String(Number(line.lineTotal)) })) }); setShowForm(true); }} className="rounded-xl border border-line px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-soft">Edit</button></div></td></tr>)}
               {filtered.length === 0 ? <tr><td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500">No quotes available yet.</td></tr> : null}
             </tbody>
           </table>
@@ -1174,7 +1180,7 @@ export function LiveCustomers() {
       outstanding: `${value.currency} ${value.outstanding.toLocaleString()}`,
     })).filter((row) => row.customer.toLowerCase().includes(search.trim().toLowerCase()));
   }, [invoices, search]);
-  return <DerivedTable label="Customers" title="Billing customers" description="Customer accounts derived from live invoice records." rows={rows} columns={[{ key: "customer", label: "Customer" }, { key: "invoices", label: "Invoices" }, { key: "total", label: "Total billed", align: "right" }, { key: "outstanding", label: "Outstanding", align: "right" }]} search={search} setSearch={setSearch} placeholder="Search customer" />;
+  return <DerivedTable label="Companies" title="Billing companies" description="Company billing accounts derived from live invoice records." rows={rows} columns={[{ key: "customer", label: "Company" }, { key: "invoices", label: "Invoices" }, { key: "total", label: "Total billed", align: "right" }, { key: "outstanding", label: "Outstanding", align: "right" }]} search={search} setSearch={setSearch} placeholder="Search company" />;
 }
 
 export function LiveVendors() {
@@ -1506,15 +1512,18 @@ export function LiveReportsPage() {
   const [projectId, setProjectId] = useState("");
   const [reportRows, setReportRows] = useState<Array<Record<string, string>>>([]);
   const [reportError, setReportError] = useState("");
+  const [reportLoading, setReportLoading] = useState(true);
   const reportQuery = useMemo(() => { const params = new URLSearchParams(); if (from) params.set("from", from); if (to) params.set("to", to); if (departmentId) params.set("departmentId", departmentId); if (projectId) params.set("projectId", projectId); const value = params.toString(); return value ? `?${value}` : ""; }, [from, to, departmentId, projectId]);
   useEffect(() => {
     let active = true;
+    setReportLoading(true);
+    setReportError("");
     void Promise.all([
       apiFetch<{ revenue: number; expenses: number; netIncome: number }>(`/accounting/reports/profit-loss${reportQuery}`),
       apiFetch<{ assets: number; liabilities: number; equity: number; balanced: boolean }>(`/accounting/reports/balance-sheet${reportQuery}`),
       apiFetch<{ inflow: number; outflow: number; net: number }>(`/accounting/reports/cash-flow${reportQuery}`),
       apiFetch<{ outputBase: number; outputTax: number; inputBase: number; netTax: number }>(`/accounting/reports/vat${reportQuery}`),
-    ]).then(([profitLoss, balance, cash, vat]) => { if (!active) return; const money = (value: number) => `${currency} ${value.toLocaleString()}`; setReportRows([{ metric: "Revenue (P&L)", value: money(profitLoss.revenue) }, { metric: "Expenses (P&L)", value: money(profitLoss.expenses) }, { metric: "Net income", value: money(profitLoss.netIncome) }, { metric: "Assets", value: money(balance.assets) }, { metric: "Liabilities", value: money(balance.liabilities) }, { metric: "Equity", value: money(balance.equity) }, { metric: "Ledger balanced", value: balance.balanced ? "Yes" : "No" }, { metric: "Cash inflow", value: money(cash.inflow) }, { metric: "Cash outflow", value: money(cash.outflow) }, { metric: "Net cash flow", value: money(cash.net) }, { metric: "VAT output tax", value: money(vat.outputTax) }, { metric: "VAT net payable", value: money(vat.netTax) }, { metric: "Outstanding receivables", value: money(overview?.outstanding ?? 0) }, { metric: "Invoice count", value: String(invoices.length) }, { metric: "Expense count", value: String(expenses.length) }, { metric: "Payment count", value: String(payments.length) }, { metric: "Vendor count", value: String(vendors.length) }, { metric: "Bank accounts", value: String(bankAccounts.length) }]); }).catch((error) => { if (active) setReportError(parseApiError(error, "Unable to load financial reports.")); });
+    ]).then(([profitLoss, balance, cash, vat]) => { if (!active) return; const money = (value: number) => `${currency} ${value.toLocaleString()}`; setReportRows([{ metric: "Revenue (P&L)", value: money(profitLoss.revenue) }, { metric: "Expenses (P&L)", value: money(profitLoss.expenses) }, { metric: "Net income", value: money(profitLoss.netIncome) }, { metric: "Assets", value: money(balance.assets) }, { metric: "Liabilities", value: money(balance.liabilities) }, { metric: "Equity", value: money(balance.equity) }, { metric: "Ledger balanced", value: balance.balanced ? "Yes" : "No" }, { metric: "Cash inflow", value: money(cash.inflow) }, { metric: "Cash outflow", value: money(cash.outflow) }, { metric: "Net cash flow", value: money(cash.net) }, { metric: "VAT output tax", value: money(vat.outputTax) }, { metric: "VAT net payable", value: money(vat.netTax) }, { metric: "Outstanding receivables", value: money(overview?.outstanding ?? 0) }, { metric: "Invoice count", value: String(invoices.length) }, { metric: "Expense count", value: String(expenses.length) }, { metric: "Payment count", value: String(payments.length) }, { metric: "Vendor count", value: String(vendors.length) }, { metric: "Bank accounts", value: String(bankAccounts.length) }]); }).catch((error) => { if (active) setReportError(parseApiError(error, "Unable to load financial reports.")); }).finally(() => { if (active) setReportLoading(false); });
     return () => { active = false; };
   }, [currency, overview?.outstanding, invoices.length, expenses.length, payments.length, vendors.length, bankAccounts.length, reportQuery]);
   const filtered = reportRows.filter((row) => `${row.metric} ${row.value}`.toLowerCase().includes(search.trim().toLowerCase()));
@@ -1524,7 +1533,7 @@ export function LiveReportsPage() {
     if (!response.ok) throw new Error("Unable to export report.");
     const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${report}.${format}`; link.click(); URL.revokeObjectURL(url);
   };
-  return <div className="space-y-3">{reportError && <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{reportError}</p>}<div className="grid gap-2 rounded-2xl border border-line bg-soft/40 p-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-xs font-semibold text-slate-600">From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">Department ID<input value={departmentId} onChange={(event) => setDepartmentId(event.target.value)} placeholder="Optional" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">Project ID<input value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="Optional" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label></div><div className="flex flex-wrap gap-2">{(["profit-loss", "cash-flow", "vat"] as const).map((report) => <span key={report} className="flex gap-2"><button onClick={() => void downloadReport(report, "csv")} className="rounded-xl border border-line px-3 py-2 text-xs font-semibold">Export {report} CSV</button><button onClick={() => void downloadReport(report, "pdf")} className="rounded-xl border border-line px-3 py-2 text-xs font-semibold">Export {report} PDF</button></span>)}</div><DerivedTable label="Reports" title="Financial reports" description="Live profit and loss, balance sheet, cash flow, VAT, and operational accounting metrics." rows={filtered} columns={[{ key: "metric", label: "Metric" }, { key: "value", label: "Value", align: "right" }]} search={search} setSearch={setSearch} placeholder="Search report metric" /></div>;
+  return <div className="space-y-3">{reportError && <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-700">{reportError}</p>}<div className="grid gap-2 rounded-2xl border border-line bg-soft/40 p-3 sm:grid-cols-2 lg:grid-cols-4"><label className="text-xs font-semibold text-slate-600">From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">Department ID<input value={departmentId} onChange={(event) => setDepartmentId(event.target.value)} placeholder="Optional" className="mt-1 w-full rounded-xl border border-line px-3 py-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">Project ID<input value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="Optional" className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm font-normal" /></label></div><div className="flex flex-wrap gap-2">{(["profit-loss", "cash-flow", "vat"] as const).map((report) => <span key={report} className="flex gap-2"><button onClick={() => void downloadReport(report, "csv")} className="rounded-xl border border-line px-3 py-2 text-xs font-semibold">Export {report} CSV</button><button onClick={() => void downloadReport(report, "pdf")} className="rounded-xl border border-line px-3 py-2 text-xs font-semibold">Export {report} PDF</button></span>)}</div><DerivedTable label="Reports" title="Financial reports" description="Live profit and loss, balance sheet, cash flow, VAT, and operational accounting metrics." rows={filtered} columns={[{ key: "metric", label: "Metric" }, { key: "value", label: "Value", align: "right" }]} search={search} setSearch={setSearch} placeholder="Search report metric" loading={reportLoading} /></div>;
 }
 
 export function LivePeriodClose() {

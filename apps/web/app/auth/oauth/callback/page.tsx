@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/lib/api";
 import { storeSession } from "@/lib/session";
+import { SHOW_GUIDE_AFTER_LOGIN_KEY } from "@/components/onboarding/permission-walkthrough";
 
 export default function OAuthCallbackPage() {
   const router = useRouter();
@@ -16,7 +17,8 @@ export default function OAuthCallbackPage() {
       .then(async (response) => {
         const result = await response.json();
         if (!response.ok) throw new Error(result.message || "OAuth sign-in failed.");
-        storeSession({ token: result.accessToken, refreshToken: result.refreshToken, id: result.user.id, email: result.user.email, name: result.user.name, role: result.user.role, tenantId: result.user.tenantId, tenantName: result.user.tenantName, enabledModules: result.user.enabledModules ?? [] });
+        storeSession({ token: result.accessToken, refreshToken: result.refreshToken, id: result.user.id, email: result.user.email, name: result.user.name, role: result.user.role, tenantId: result.user.tenantId, tenantName: result.user.tenantName, enabledModules: result.user.enabledModules ?? [], profilePictureUrl: result.user.profilePictureUrl });
+        window.sessionStorage.setItem(SHOW_GUIDE_AFTER_LOGIN_KEY, "true");
         router.replace("/dashboard");
       })
       .catch((reason) => setMessage(reason instanceof Error ? reason.message : "OAuth sign-in failed."));

@@ -437,8 +437,8 @@ export function LiveCrm() {
       </div>
 
       {selectedContact ? (
-        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/35 px-4 py-8 backdrop-blur-sm" onClick={() => setSelectedContact(null)}>
-          <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-line bg-white shadow-[0_30px_80px_rgba(15,23,42,0.2)]" onClick={(event) => event.stopPropagation()}>
+        <div className="fixed inset-0 z-[55] flex items-center justify-center overflow-y-auto bg-slate-950/35 px-4 py-8 backdrop-blur-sm" onClick={() => setSelectedContact(null)}>
+          <div className="my-auto max-h-[calc(100vh-4rem)] w-full max-w-2xl overflow-y-auto rounded-[28px] border border-line bg-white shadow-[0_30px_80px_rgba(15,23,42,0.2)]" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-500">Contact details</p>
@@ -452,6 +452,22 @@ export function LiveCrm() {
               <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Phone</p><p className="mt-2 text-sm font-medium text-ink">{selectedContact.phone || "Not provided"}</p></div>
               <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Company</p><p className="mt-2 text-sm font-medium text-ink">{selectedContact.company?.name || "Unlinked"}</p></div>
               <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Tags</p><div className="mt-2 flex flex-wrap gap-1.5">{selectedContact.tags.length ? selectedContact.tags.map((tag) => <span key={tag} className="rounded-full bg-brand-50 px-2 py-1 text-[10px] font-semibold text-brand-500">{tag}</span>) : <span className="text-sm text-slate-400">No tags</span>}</div></div>
+              <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Initials</p><p className="mt-2 text-sm font-medium text-ink">{selectedContact.initials || "Not provided"}</p></div>
+              <div className="rounded-2xl border border-line bg-slate-50/60 p-4"><p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Employee number</p><p className="mt-2 text-sm font-medium text-ink">{selectedContact.employeeNumber || "Not provided"}</p></div>
+            </div>
+            <div className="mx-6 mb-5 rounded-2xl border border-line bg-brand-50/40 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-brand-600">Monthly contribution</p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-3">
+                <div><p className="text-xs text-slate-500">Amount</p><p className="mt-1 text-sm font-semibold text-ink">{selectedContact.monthlyContribution ? `R${Number(selectedContact.monthlyContribution).toLocaleString()}` : "Not configured"}</p></div>
+                <div><p className="text-xs text-slate-500">Start date</p><p className="mt-1 text-sm font-semibold text-ink">{selectedContact.contributionStartDate ? new Date(selectedContact.contributionStartDate).toLocaleDateString() : "Not configured"}</p></div>
+                <div><p className="text-xs text-slate-500">Description</p><p className="mt-1 text-sm font-semibold text-ink">{selectedContact.contributions || "Not provided"}</p></div>
+              </div>
+            </div>
+            <div className="border-t border-line px-6 py-5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Recent activity</p>
+              <div className="mt-3 space-y-2">
+                {activities.filter((activity) => activity.contactId === selectedContact.id).length ? activities.filter((activity) => activity.contactId === selectedContact.id).map((activity) => <div key={activity.id} className="flex items-start justify-between gap-3 rounded-2xl border border-line px-4 py-3"><div><p className="text-sm font-semibold text-ink">{activity.title}</p><p className="mt-1 text-xs text-slate-500">{new Date(activity.occurredAt).toLocaleString()}</p></div><span className="rounded-full bg-soft px-2.5 py-1 text-[10px] font-semibold text-slate-600">{activity.type}</span></div>) : <p className="rounded-2xl border border-dashed border-line px-4 py-4 text-sm text-slate-500">No activity history yet for this client.</p>}
+              </div>
             </div>
             <div className="flex justify-end gap-3 border-t border-line px-6 py-4">
               <button onClick={() => { setSelectedContact(null); setContactForm({ id: selectedContact.id, firstName: selectedContact.firstName ?? selectedContact.fullName.split(" ")[0] ?? "", surname: selectedContact.surname ?? selectedContact.fullName.split(" ").slice(1).join(" "), initials: selectedContact.initials ?? "", employeeNumber: selectedContact.employeeNumber ?? "", contributions: selectedContact.contributions ?? "", monthlyContribution: selectedContact.monthlyContribution ? String(selectedContact.monthlyContribution) : "", contributionStartDate: selectedContact.contributionStartDate?.slice(0, 10) ?? "", fullName: selectedContact.fullName, email: selectedContact.email ?? "", phone: selectedContact.phone ?? "", companyId: selectedContact.companyId ?? "", tags: selectedContact.tags.join(", ") }); setShowContactForm(true); }} className="rounded-2xl bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white">Edit contact</button>
@@ -566,8 +582,8 @@ export function LiveCrm() {
       ) : null}
 
       {showContactForm ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4 py-8 backdrop-blur-sm">
-          <div className="w-full max-w-5xl rounded-[28px] border border-line bg-white shadow-[0_30px_80px_rgba(15,23,42,0.18)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/30 px-4 py-8 backdrop-blur-sm">
+          <div className="my-auto max-h-[calc(100vh-4rem)] w-full max-w-5xl overflow-y-auto rounded-[28px] border border-line bg-white shadow-[0_30px_80px_rgba(15,23,42,0.18)]">
             <div className="flex items-start justify-between gap-4 border-b border-line px-6 py-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">

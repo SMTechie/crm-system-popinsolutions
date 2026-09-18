@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, ShieldCheck, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { filterModuleCards, getAccessibleModules } from "@/lib/modules";
 import { type SessionUser } from "@/lib/session";
 
 const COMPLETED_PREFIX = "popin-permission-walkthrough:";
+export const SHOW_GUIDE_AFTER_LOGIN_KEY = "popin-show-workspace-guide";
 
 type PermissionWalkthroughProps = { user: SessionUser };
 
@@ -14,6 +16,7 @@ export function PermissionWalkthrough({ user }: PermissionWalkthroughProps) {
   const [step, setStep] = useState(0);
   const [open, setOpen] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
+  const pathname = usePathname();
   const modules = useMemo(() => filterModuleCards(getAccessibleModules(user.role, user.enabledModules)), [user.enabledModules, user.role]);
   const steps = useMemo(() => [
     {
@@ -39,8 +42,11 @@ export function PermissionWalkthrough({ user }: PermissionWalkthroughProps) {
   ], [modules, user.name, user.role]);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !window.localStorage.getItem(`${COMPLETED_PREFIX}${user.id}`)) setOpen(true);
-  }, [user.id]);
+    if (pathname !== "/dashboard") return;
+    const shouldShow = window.sessionStorage.getItem(SHOW_GUIDE_AFTER_LOGIN_KEY) === "true";
+    window.sessionStorage.removeItem(SHOW_GUIDE_AFTER_LOGIN_KEY);
+    if (shouldShow && !window.localStorage.getItem(`${COMPLETED_PREFIX}${user.id}`)) setOpen(true);
+  }, [pathname, user.id]);
 
   function finish() {
     if (dontShowAgain) window.localStorage.setItem(`${COMPLETED_PREFIX}${user.id}`, "true");

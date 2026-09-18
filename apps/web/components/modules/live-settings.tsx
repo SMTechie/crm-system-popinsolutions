@@ -1379,9 +1379,14 @@ export function LivePermissionsSettingsPage() {
 
   async function addPermission() {
     if (!newPermissionKey.trim()) return;
+    const normalizedKey = newPermissionKey.trim().toLowerCase().replace(/\s+/g, ".");
+    if (!/^[a-z0-9]+(?:[._-][a-z0-9]+)+$/.test(normalizedKey)) {
+      notify("error", "Use a permission key such as crm.customers.export or settings.manage.");
+      return;
+    }
     try {
       setPermissionBusy(true);
-      const result = await apiFetch<{ permission: PermissionDefinition }>("/settings/permissions", { method: "POST", body: JSON.stringify({ key: newPermissionKey, description: newPermissionDescription }) });
+      const result = await apiFetch<{ permission: PermissionDefinition }>("/settings/permissions", { method: "POST", body: JSON.stringify({ key: normalizedKey, description: newPermissionDescription }) });
       setPermissionDefinitions((current) => [...current, result.permission].sort((a, b) => a.key.localeCompare(b.key)));
       setNewPermissionKey(""); setNewPermissionDescription("");
       notify("success", "Permission added. Assign it to a role below.");

@@ -541,10 +541,12 @@ export class HrController {
   }
 
   @Get("payroll-runs")
-  @RequiresPermission("hr.employees.view")
-  async payrollRuns(@Tenant() tenantId: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
+  @ModuleAccess("attendance")
+  @RequiresPermission("attendance.view")
+  async payrollRuns(@Tenant() tenantId: string, @Req() request: { user: { sub: string; role?: string } }, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
-    const pagination = this.pagination(page, pageSize); const where = { employee: { tenantId: tenant.id } };
+    const canViewAll = ["HR_MANAGER", "OWNER", "ADMIN", "SUPER_ADMIN", "ORGANISATION_ADMIN", "ACCOUNTANT"].includes(request.user.role ?? "");
+    const pagination = this.pagination(page, pageSize); const where = { employee: { tenantId: tenant.id, ...(canViewAll ? {} : { userId: request.user.sub }) } };
     const [items, total] = await Promise.all([this.prisma.payrollRun.findMany({
       where,
       include: { employee: true, deductionItems: true },
@@ -654,14 +656,17 @@ export class HrController {
   }
 
   @Get("payroll-runs/:payrollRunId/payslip")
-  @RequiresPermission("hr.employees.view")
+  @ModuleAccess("attendance")
+  @RequiresPermission("attendance.view")
   async payrollPayslip(
     @Tenant() tenantId: string,
     @Param("payrollRunId") payrollRunId: string,
+    @Req() request: { user: { sub: string; role?: string } },
     @Res() response: { setHeader: (name: string, value: string) => void; end: (body: Buffer) => void },
   ) {
     const tenant = await this.tenantService.ensureTenant(tenantId);
-    const payroll = await this.prisma.payrollRun.findFirst({ where: { id: payrollRunId, employee: { tenantId: tenant.id } }, include: { employee: true, deductionItems: true } });
+    const canViewAll = ["HR_MANAGER", "OWNER", "ADMIN", "SUPER_ADMIN", "ORGANISATION_ADMIN", "ACCOUNTANT"].includes(request.user.role ?? "");
+    const payroll = await this.prisma.payrollRun.findFirst({ where: { id: payrollRunId, employee: { tenantId: tenant.id, ...(canViewAll ? {} : { userId: request.user.sub }) } }, include: { employee: true, deductionItems: true } });
     if (!payroll) throw new BadRequestException("Payroll run not found.");
     let logoBuffer: Buffer | null = null;
     if (tenant.logoUrl) {

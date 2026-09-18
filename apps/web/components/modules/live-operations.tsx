@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { getStoredSession } from "@/lib/session";
 import { Card } from "@/components/ui/card";
 
 type Project = { id: string; name: string; customer?: string | null; status: string; budget?: string | number | null; tasks: { id: string }[] };

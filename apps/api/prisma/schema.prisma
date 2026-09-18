@@ -150,6 +150,7 @@ model User {
   role                    UserRole
   status                  AccountStatus            @default(ACTIVE)
   phone                   String?
+  profilePictureUrl       String?
   lastLoginAt             DateTime?
   deactivatedAt           DateTime?
   emailVerifiedAt         DateTime?

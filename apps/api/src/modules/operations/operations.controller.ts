@@ -16,6 +16,10 @@ import { NotificationsService } from "./notifications.service";
 export class OperationsController {
   constructor(private readonly prisma: PrismaService, private readonly audit: AuditService, private readonly notificationService: NotificationsService) {}
 
+  private canViewAllAttendance(role?: string) {
+    return ["HR_MANAGER", "OWNER", "ADMIN", "SUPER_ADMIN", "ORGANISATION_ADMIN"].includes(role ?? "");
+  }
+
   private parseCoordinates(value?: string) {
     const [latitude, longitude] = (value || "").split(",").map((item) => Number(item.trim()));
     return Number.isFinite(latitude) && Number.isFinite(longitude) && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180 ? { latitude, longitude } : null;
@@ -106,6 +110,14 @@ export class OperationsController {
       this.prisma.asset.count({ where }),
     ]);
     return { items, meta: this.pageMeta(pagination, total) };
+  }
+
+  @Get("assets/mine")
+  async myAssets(@Tenant() slug: string, @Req() request: { user: { sub: string } }) {
+    const tenantId = await this.tenantId(slug);
+    const employee = await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub }, select: { id: true } });
+    if (!employee) return { items: [] };
+    return { items: await this.prisma.assetAssignment.findMany({ where: { employeeId: employee.id, returnedAt: null, asset: { tenantId } }, include: { asset: true }, orderBy: { assignedAt: "desc" } }) };
   }
 
   @Get("users")
@@ -455,21 +467,53 @@ export class OperationsController {
 
   @Get("attendance/history")
   @RequiresPermission("attendance.view")
-  async attendanceHistory(@Tenant() slug: string, @Req() request: { user: { sub: string } }) {
+  async attendanceHistory(@Tenant() slug: string, @Req() request: { user: { sub: string; role?: string } }) {
     const tenantId = await this.tenantId(slug);
     const employee = await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub } });
-    return { items: employee ? await this.prisma.attendanceRecord.findMany({ where: { employeeId: employee.id }, orderBy: { date: "desc" }, take: 100 }) : [] };
+    const where = this.canViewAllAttendance(request.user.role) ? { employee: { tenantId } } : { employeeId: employee?.id ?? "__no_employee__" };
+    return { items: await this.prisma.attendanceRecord.findMany({ where, orderBy: { date: "desc" }, take: 100 }) };
+  }
+
+  @Get("attendance/leave-requests")
+  @RequiresPermission("attendance.view")
+  async ownLeaveRequests(@Tenant() slug: string, @Req() request: { user: { sub: string } }) {
+    const tenantId = await this.tenantId(slug);
+    const employee = await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub }, select: { id: true } });
+    if (!employee) throw new BadRequestException("Your login is not linked to an employee profile.");
+    return { items: await this.prisma.leaveRequest.findMany({ where: { employeeId: employee.id }, orderBy: { startDate: "desc" }, take: 25 }) };
+  }
+
+  @Post("attendance/leave-requests")
+  @RequiresPermission("attendance.view")
+  async applyForLeave(
+    @Tenant() slug: string,
+    @Req() request: { user: { sub: string } },
+    @Body() body: { startDate?: string; endDate?: string; type?: string; reason?: string },
+  ) {
+    const tenantId = await this.tenantId(slug);
+    const employee = await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub }, select: { id: true } });
+    if (!employee) throw new BadRequestException("Your login is not linked to an employee profile.");
+    if (!body.startDate || !body.endDate || !body.type?.trim()) throw new BadRequestException("Leave type and dates are required.");
+    const startDate = new Date(body.startDate);
+    const endDate = new Date(body.endDate);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate < startDate) throw new BadRequestException("Leave dates are invalid.");
+    const conflict = await this.prisma.leaveRequest.findFirst({ where: { employeeId: employee.id, status: { in: ["PENDING", "APPROVED"] }, startDate: { lte: endDate }, endDate: { gte: startDate } } });
+    if (conflict) throw new BadRequestException("You already have a pending or approved leave request for these dates.");
+    const item = await this.prisma.leaveRequest.create({ data: { employeeId: employee.id, startDate, endDate, type: body.type.trim().toUpperCase(), status: "PENDING", reason: body.reason?.trim() || null } });
+    return { status: "submitted", item };
   }
 
   @Get("attendance/report")
   @RequiresPermission("attendance.view")
-  async attendanceReport(@Tenant() slug: string, @Query("from") from?: string, @Query("to") to?: string, @Query("employeeId") employeeId?: string) {
+  async attendanceReport(@Tenant() slug: string, @Req() request: { user: { sub: string; role?: string } }, @Query("from") from?: string, @Query("to") to?: string, @Query("employeeId") employeeId?: string) {
     const tenantId = await this.tenantId(slug);
     const start = from ? new Date(from) : new Date(new Date().setDate(new Date().getDate() - 30));
     const end = to ? new Date(to) : new Date();
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) throw new BadRequestException("Attendance report dates are invalid.");
     start.setHours(0, 0, 0, 0); end.setHours(23, 59, 59, 999);
-    const employees = await this.prisma.employee.findMany({ where: { tenantId, employmentStatus: "ACTIVE", id: employeeId || undefined }, include: { workSchedules: true }, orderBy: { fullName: "asc" } });
+    const allAttendance = this.canViewAllAttendance(request.user.role);
+    const ownEmployee = allAttendance ? null : await this.prisma.employee.findFirst({ where: { tenantId, userId: request.user.sub, employmentStatus: "ACTIVE" }, select: { id: true } });
+    const employees = await this.prisma.employee.findMany({ where: { tenantId, employmentStatus: "ACTIVE", id: allAttendance ? (employeeId || undefined) : (ownEmployee?.id || "__no_employee__") }, include: { workSchedules: true }, orderBy: { fullName: "asc" } });
     const records = await this.prisma.attendanceRecord.findMany({ where: { employeeId: { in: employees.map((employee) => employee.id) }, date: { gte: start, lte: end } }, orderBy: { date: "asc" } });
     const byEmployeeDate = new Map(records.map((record) => [`${record.employeeId}:${record.date.toISOString().slice(0, 10)}`, record]));
     const daily: Array<{ date: string; employeeId: string; employee: string; status: string; late: boolean; missingClockOut: boolean; hours: number; overtime: number }> = [];
