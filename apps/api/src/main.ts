@@ -8,7 +8,7 @@ import { AppModule } from "./app.module";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
   app.setGlobalPrefix("api/v1");
-  app.enableCors({ origin: process.env.WEB_APP_URL || "http://localhost:3000", credentials: true });
+  app.enableCors({ origin: process.env.WEB_APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000", credentials: true });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.use((_request: unknown, response: { setHeader: (name: string, value: string) => void }, next: () => void) => {
     response.setHeader("X-Content-Type-Options", "nosniff");
@@ -38,7 +38,7 @@ async function bootstrap() {
     const expressApp = app.getHttpAdapter().getInstance();
     expressApp.use("/uploads", require("express").static(uploadDir));
   }
-  await app.listen(4000);
+  await app.listen(Number(process.env.PORT) || 4000);
 }
 
 bootstrap();
