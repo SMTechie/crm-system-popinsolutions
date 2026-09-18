@@ -1,9 +1,12 @@
 node_modules
 .next
+.next-*
+.vercel
 dist
 coverage
 .env
 .env.local
+uploads
 .turbo
 *.log
 
